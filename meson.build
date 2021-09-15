@@ -340,7 +340,7 @@ subdir('tests')
 # dosbox executable
 #
 version_file = vcs_tag(input : 'src/version.cpp.in', output : 'version.cpp')
-executable('dosbox', ['src/main.cpp', 'src/dosbox.cpp', version_file],
+executable('basebox', ['src/main.cpp', 'src/dosbox.cpp', version_file],
            dependencies : [atomic_dep, threads_dep, sdl2_dep] + internal_deps,
            include_directories : incdir,
            install : true)
