@@ -50,6 +50,7 @@ struct button_event {
 #define MOUSE_IRQ 12
 #define POS_X (static_cast<Bit16s>(mouse.x) & mouse.gran_x)
 #define POS_Y (static_cast<Bit16s>(mouse.y) & mouse.gran_y)
+#define MOUSE_SUPPORT_WHEEL 1
 
 #define CURSORX 16
 #define CURSORY 16
@@ -83,6 +84,9 @@ static struct {
 	Bit16u last_released_y[MOUSE_BUTTONS];
 	Bit16u last_pressed_x[MOUSE_BUTTONS];
 	Bit16u last_pressed_y[MOUSE_BUTTONS];
+	Bit16u last_wheel_x;
+	Bit16u last_wheel_y;
+	Bit16s wheel_moved;
 	Bit16u hidden;
 	float add_x,add_y;
 	Bit16s min_x,max_x,min_y,max_y;
@@ -193,7 +197,8 @@ Bitu PS2_Handler(void) {
 #define MOUSE_RIGHT_RELEASED 16
 #define MOUSE_MIDDLE_PRESSED 32
 #define MOUSE_MIDDLE_RELEASED 64
-#define MOUSE_DELAY 5.0
+#define MOUSE_WHEEL_MOVED 128
+#define MOUSE_DELAY           5.0
 
 void MOUSE_Limit_Events(uint32_t /*val*/)
 {
@@ -513,6 +518,14 @@ void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
 	DrawCursor();
 }
 
+void Mouse_WheelMoved(Bit16s offset)
+{
+	mouse.wheel_moved -= offset;
+	mouse.last_wheel_x = POS_X;
+	mouse.last_wheel_y = POS_Y;
+	Mouse_AddEvent(MOUSE_WHEEL_MOVED);
+}
+
 void Mouse_CursorSet(float x,float y) {
 	mouse.x=x;
 	mouse.y=y;
@@ -706,7 +719,7 @@ static void Mouse_Reset()
 
 	mouse.buttons = 0;
 
-	for (Bit16u but=0; but<MOUSE_BUTTONS; but++) {
+	for (Bit16u but = 0; but < MOUSE_BUTTONS; but++) {
 		mouse.times_pressed[but] = 0;
 		mouse.times_released[but] = 0;
 		mouse.last_pressed_x[but] = 0;
@@ -714,6 +727,10 @@ static void Mouse_Reset()
 		mouse.last_released_x[but] = 0;
 		mouse.last_released_y[but] = 0;
 	}
+
+	mouse.wheel_moved = 0;
+	mouse.last_wheel_x = 0;
+	mouse.last_wheel_y = 0;
 
 	// Dont set max coordinates here. it is done by SetResolution!
 	mouse.x = static_cast<float>((mouse.max_x + 1)/ 2);
@@ -746,9 +763,9 @@ static Bitu INT33_Handler(void) {
 		}
 		break;
 	case 0x03:	/* Return position and Button Status */
-		reg_bx=mouse.buttons;
-		reg_cx=POS_X;
-		reg_dx=POS_Y;
+		reg_bx = mouse.buttons |(mouse.wheel_moved << 8) & 0xFF00;
+		reg_cx = POS_X;
+		reg_dx = POS_Y;
 		break;
 	case 0x04:	/* Position Mouse */
 		/* If position isn't different from current position
@@ -766,23 +783,41 @@ static Bitu INT33_Handler(void) {
 	case 0x05:	/* Return Button Press Data */
 		{
 			Bit16u but=reg_bx;
-			reg_ax=mouse.buttons;
-			if (but>=MOUSE_BUTTONS) but = MOUSE_BUTTONS - 1;
-			reg_cx=mouse.last_pressed_x[but];
-			reg_dx=mouse.last_pressed_y[but];
-			reg_bx=mouse.times_pressed[but];
-			mouse.times_pressed[but]=0;
+			if (reg_bx == 0xFFFF) {
+			    reg_ax = mouse.buttons | (mouse.wheel_moved << 8) & 0xFF00;
+			    reg_cx = mouse.last_wheel_x;
+				reg_dx = mouse.last_wheel_y;
+				reg_bx = mouse.wheel_moved;
+				mouse.wheel_moved = 0;
+		    } else {
+			    reg_ax = mouse.buttons;
+			    if (but >= MOUSE_BUTTONS)
+				    but = MOUSE_BUTTONS - 1;
+			    reg_cx = mouse.last_pressed_x[but];
+			    reg_dx = mouse.last_pressed_y[but];
+			    reg_bx = mouse.times_pressed[but];
+			    mouse.times_pressed[but] = 0;
+		    }
 		}
 		break;
 	case 0x06:	/* Return Button Release Data */
 		{
 			Bit16u but=reg_bx;
-			reg_ax=mouse.buttons;
-			if (but>=MOUSE_BUTTONS) but = MOUSE_BUTTONS - 1;
-			reg_cx=mouse.last_released_x[but];
-			reg_dx=mouse.last_released_y[but];
-			reg_bx=mouse.times_released[but];
-			mouse.times_released[but]=0;
+			if (reg_bx == 0xFFFF) {
+			    reg_ax = mouse.buttons | (mouse.wheel_moved << 8) & 0xFF00;
+				reg_cx = mouse.last_wheel_x;
+				reg_dx = mouse.last_wheel_y;
+				reg_bx = mouse.wheel_moved;
+			    mouse.wheel_moved = 0;
+		    } else {
+			    reg_ax = mouse.buttons;
+			    if (but >= MOUSE_BUTTONS)
+				    but = MOUSE_BUTTONS - 1;
+			    reg_cx = mouse.last_released_x[but];
+			    reg_dx = mouse.last_released_y[but];
+			    reg_bx = mouse.times_released[but];
+			    mouse.times_released[but] = 0;
+	        } 
 		}
 		break;
 	case 0x07:	/* Define horizontal cursor range */
@@ -864,8 +899,9 @@ static Bitu INT33_Handler(void) {
 		DrawCursor();
 		break;
 	case 0x11:      /* Get number of buttons */
-		reg_ax=0xffff;
+		reg_ax=0x574D; /* wheels api support */
 		reg_bx=MOUSE_BUTTONS;
+		reg_cx=MOUSE_SUPPORT_WHEEL; /* mouse supports wheels */
 		break;
 	case 0x13:      /* Set double-speed threshold */
 		mouse.doubleSpeedThreshold=(reg_bx ? reg_bx : 64);
@@ -1050,7 +1086,11 @@ static Bitu INT74_Handler(void) {
 		/* Check for an active Interrupt Handler that will get called */
 		if (mouse.sub_mask & mouse.event_queue[mouse.events].type) {
 			reg_ax=mouse.event_queue[mouse.events].type;
-			reg_bx=mouse.event_queue[mouse.events].buttons;
+			if (mouse.event_queue[mouse.events].type == MOUSE_WHEEL_MOVED) {
+				reg_bx = mouse.event_queue[mouse.events].buttons | (mouse.wheel_moved << 8) & 0xFF00;
+			} else {
+				reg_bx = mouse.event_queue[mouse.events].buttons;
+			}
 			reg_cx=POS_X;
 			reg_dx=POS_Y;
 			reg_si=static_cast<Bit16s>(mouse.mickey_x);
@@ -1062,6 +1102,7 @@ static Bitu INT74_Handler(void) {
 			CPU_Push16(mouse.sub_seg);
 			CPU_Push16(mouse.sub_ofs);
 			mouse.in_UIR = true;
+			mouse.wheel_moved = 0;
 			//LOG(LOG_MOUSE,LOG_ERROR)("INT 74 %X",mouse.event_queue[mouse.events].type );
 		} else if (useps2callback) {
 			CPU_Push16(RealSeg(CALLBACK_RealPointer(int74_ret_callback)));

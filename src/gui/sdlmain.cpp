@@ -2973,6 +2973,10 @@ static bool ProcessEvents()
 			if (sdl.mouse.control_choice != NoMouse)
 				HandleMouseButton(&event.button);
 			break;
+
+		case SDL_MOUSEWHEEL:
+			Mouse_WheelMoved(static_cast<Bit16s>(event.wheel.y));
+			break;
 		case SDL_QUIT: RequestExit(true); break;
 #ifdef WIN32
 		case SDL_KEYDOWN:
