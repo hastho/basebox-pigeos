@@ -57,6 +57,10 @@
 void NE2K_Init(Section* sec);
 #endif
 
+#ifdef C_GEOSHOST
+void GeosHost_Init(Section *sec);
+#endif
+
 Config * control;
 bool exit_requested = false;
 MachineType machine;
@@ -920,6 +924,10 @@ void DOSBOX_Init(void) {
 	secprop=control->AddSection_prop("ipx",&IPX_Init,true);
 	Pbool = secprop->Add_bool("ipx",Property::Changeable::WhenIdle, false);
 	Pbool->Set_help("Enable ipx over UDP/IP emulation.");
+#endif
+
+#ifdef C_GEOSHOST
+	secprop = control->AddSection_prop("geoshost", &GeosHost_Init, true);
 #endif
 
 #if C_NE2000
