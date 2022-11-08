@@ -55,6 +55,9 @@
 #include "video.h"
 
 bool shutdown_requested = false;
+#ifdef C_GEOSHOST
+void GeosHost_Init(Section *sec);
+#endif
 MachineType machine;
 SVGACards svgaCard;
 
@@ -1168,9 +1171,12 @@ void DOSBOX_Init()
 	Pbool->Set_help("Enable ipx over UDP/IP emulation.");
 #endif
 
+#ifdef C_GEOSHOST
+	secprop = control->AddSection_prop("geoshost", &GeosHost_Init, true);
+#endif
 #if C_SLIRP
 	secprop = control->AddSection_prop("ethernet", &NE2K_Init, true);
-
+	);
 	Pbool = secprop->Add_bool("ne2000", when_idle,  true);
 	Pbool->Set_help(
 	        "Enable emulation of a Novell NE2000 network card on a software-based\n"
