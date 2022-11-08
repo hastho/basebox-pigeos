@@ -730,6 +730,21 @@
     <ClCompile Include="..\src\libs\zmbv\drvproc.cpp" />
     <ClCompile Include="..\src\libs\zmbv\zmbv.cpp" />
     <ClCompile Include="..\src\libs\zmbv\zmbv_vfw.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouse.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouse_common.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouse_config.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouse_interfaces.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouse_manymouse.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouse_queue.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouseif_dos_driver.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouseif_ps2_bios.cpp" />
+    <ClCompile Include="..\src\hardware\mouse\mouseif_virtual_machines.cpp" />
+    <ClCompile Include="..\src\libs\manymouse\linux_evdev.c" />
+    <ClCompile Include="..\src\libs\manymouse\macosx_hidmanager.c" />
+    <ClCompile Include="..\src\libs\manymouse\macosx_hidutilities.c" />
+    <ClCompile Include="..\src\libs\manymouse\manymouse.c" />
+    <ClCompile Include="..\src\libs\manymouse\windows_wminput.c" />
+    <ClCompile Include="..\src\libs\manymouse\x11_xinput2.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\bios.h">
@@ -1014,13 +1029,7 @@
     <ClInclude Include="..\src\hardware\serialport\softmodem.h">
       <Filter>src\hardware\serialport</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\hardware\serialport\serialmouse.h">
-      <Filter>src\hardware\serialport</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\ints\int10.h">
-      <Filter>src\ints</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\ints\mouse_core.h">
       <Filter>src\ints</Filter>
     </ClInclude>
     <ClInclude Include="..\src\ints\xms.h">
@@ -1208,6 +1217,8 @@
     </ClInclude>
     <ClInclude Include="..\src\libs\zmbv\Resource.h" />
     <ClInclude Include="..\src\libs\zmbv\zmbv.h" />
+    <ClInclude Include="..\src\hardware\serialport\softmouse.h" />
+    <ClInclude Include="..\src\libs\manymouse\manymouse.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\src\winres.rc">
