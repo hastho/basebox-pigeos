@@ -1236,7 +1236,7 @@ void DOSBOX_Init()
 
 	//	secprop->AddInitFunction(&CREDITS_Init);
 
-	//TODO ?
+	//TODO?
 	control->AddSection_line("autoexec", &AUTOEXEC_Init);
 	MSG_Add("AUTOEXEC_CONFIGFILE_HELP",
 		"Lines in this section will be run at startup.\n"
