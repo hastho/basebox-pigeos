@@ -1176,7 +1176,6 @@ void DOSBOX_Init()
 #endif
 #if C_SLIRP
 	secprop = control->AddSection_prop("ethernet", &NE2K_Init, true);
-	);
 	Pbool = secprop->Add_bool("ne2000", when_idle,  true);
 	Pbool->Set_help(
 	        "Enable emulation of a Novell NE2000 network card on a software-based\n"
