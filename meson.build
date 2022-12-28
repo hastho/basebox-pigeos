@@ -121,6 +121,10 @@ if get_option('autovec_info')
     ]
 endif
 
+extra_flags += [
+    '-DTLS_AMALGAMATION',
+]
+
 # Allow-list the flags against the compiler, and add them to the project
 foreach flag : extra_flags
     if cc.has_argument(flag)
