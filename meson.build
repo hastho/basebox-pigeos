@@ -158,6 +158,7 @@ os_family_name = {
   'dragonfly' : 'BSD',
 }.get(host_machine.system(), 'UNKNOWN_OS')
 conf_data.set(os_family_name, 1)
+conf_data.set10('C_GEOSHOST', 1)
 
 conf_data.set10('C_MODEM', get_option('use_sdl2_net'))
 conf_data.set10('C_IPX', get_option('use_sdl2_net'))
