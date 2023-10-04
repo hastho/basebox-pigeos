@@ -78,7 +78,7 @@ enum { RETURN_EXIT=0,RETURN_CTRLC=1,RETURN_ABORT=2,RETURN_TSR=3};
 
 #define DOS_FILES   255
 #define DOS_DRIVES  26
-#define DOS_DEVICES 10
+#define DOS_DEVICES 14
 
 // dos swappable area is 0x320 bytes beyond the sysvars table
 // device driver chain is inside sysvars
