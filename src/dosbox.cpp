@@ -97,7 +97,7 @@ void TANDYSOUND_Init(Section*);
 void LPT_DAC_Init(Section *);
 void PS1AUDIO_Init(Section *);
 void SERIAL_Init(Section*);
-
+void PRINTER_Init(Section*);
 
 #if C_IPX
 void IPX_Init(Section*);
@@ -1120,6 +1120,31 @@ void DOSBOX_Init()
 	pstring = secprop->Add_path("phonebookfile", only_at_start, "phonebook.txt");
 	pstring->Set_help("File used to map fake phone numbers to addresses.");
 
+	secprop = control->AddSection_prop("printer",&PRINTER_Init, false);
+	Pint = secprop->Add_int("print_timeout", Property::Changeable::OnlyAtStart, 2000);
+	Pint->SetMinMax(1,1000000);
+	Pint->Set_help(
+		"Number of ticks before spooled output is printed.\n"
+		"(A number between 1 and 1000000)"
+	);
+	Pstring = secprop->Add_path("tmpdir",Property::Changeable::OnlyAtStart,"");
+	Pstring->Set_help(
+		"Path where to store temporary work files.\n"
+		"If nothing is specified current directory will be used.");
+	
+	Pstring = secprop->Add_string("LPT1", Property::Changeable::OnlyAtStart, "disabled");
+	Pstring->Set_help(
+		"Set printer redirection\n"
+		"Can be 'disabled' or platform dependend command.\n"
+		"'%s' in command string will be replaced by temporary work file name."
+	);
+	Pstring = secprop->Add_string("LPT2", Property::Changeable::OnlyAtStart, "disabled");
+	Pstring->Set_help("see LPT1");
+	Pstring = secprop->Add_string("LPT3", Property::Changeable::OnlyAtStart, "disabled");
+	Pstring->Set_help("see LPT1");
+	Pstring = secprop->Add_string("LPT4", Property::Changeable::OnlyAtStart, "disabled");
+	Pstring->Set_help("see LPT1");
+	
 	/* All the DOS Related stuff, which will eventually start up in the shell */
 	secprop=control->AddSection_prop("dos",&DOS_Init,false);//done
 	secprop->AddInitFunction(&XMS_Init,true);//done
