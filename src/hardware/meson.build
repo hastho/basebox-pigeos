@@ -38,6 +38,7 @@ libhardware_sources = files(
     'pcspeaker_discrete.cpp',
     'pcspeaker_impulse.cpp',
     'pic.cpp',
+    'printer.cpp',
     'ps1audio.cpp',
     'sblaster.cpp',
     'ston1_dac.cpp',

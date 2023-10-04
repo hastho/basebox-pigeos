@@ -1,6 +1,6 @@
 #include "control.h"
 #include "dosbox.h"
-#include "cross.h"
+/*#include "cross.h"*/
 #include "timer.h"
 #include "setup.h"
 #include "../dos/dev_lpt.h"
