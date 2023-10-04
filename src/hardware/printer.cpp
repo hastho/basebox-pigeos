@@ -9,7 +9,7 @@
 
 #define LPTXDBG
 
-static Bit32u Timeout;
+static uint8_t Timeout;
 static device_LPT *devLPT[MAX_PRDEV];
 
 static void Spooler (void) {
@@ -88,7 +88,7 @@ public:
 
 static PRINTERDEV *PrinterBaseClass;
 
-void PRINTER_Shutdown(Section* sec) {
+void PRINTER_Shutdown([[maybe_unused]] Section* sec) {
 	delete PrinterBaseClass;
 	PrinterBaseClass = NULL;
 }
