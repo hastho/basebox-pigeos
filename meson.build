@@ -304,12 +304,10 @@ if cxx.compiles(builtin_expect_code, name: 'test for __builtin_expect support')
 endif
 
 atomic_code = '''
-#include <atomic>
-#include <cstdint>
+#include <stdint.h>
 int main() {
-  std::atomic<std::int16_t> x16 = 1;
-  std::atomic<std::int32_t> x32 = 1;
-  return static_cast<int>(x32.load() - x16.load());
+  uint64_t n;
+  return (int)__atomic_load_n(&n, __ATOMIC_ACQUIRE);
 }
 '''
 atomic_dep = dependency('', required: false)
