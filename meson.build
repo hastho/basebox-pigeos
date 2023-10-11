@@ -11,6 +11,7 @@ project(
     default_options: [
         'cpp_std=c++20',
         'buildtype=release',
+        'default_library=static',
         'b_ndebug=if-release',
         'b_staticpic=false',
         'b_pie=false',
