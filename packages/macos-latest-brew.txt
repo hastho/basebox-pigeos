@@ -11,6 +11,8 @@ patchutils
 pcre 
 pkg-config
 readline
+sdl2
+sdl2_net
 speexdsp
 wget
 ffmpeg
