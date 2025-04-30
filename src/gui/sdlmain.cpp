@@ -76,6 +76,10 @@
 #include "vga.h"
 #include "video.h"
 
+#if C_GEOSHOST
+extern void GeosHost_NotifyVideoChange();
+#endif
+
 static void switch_console_to_utf8()
 {
 #if WIN32
@@ -3724,6 +3728,10 @@ static void handle_video_resize(int width, int height)
 
 	// Ensure mouse emulation knows the current parameters
 	notify_new_mouse_screen_params();
+
+#if C_GEOSHOST
+	GeosHost_NotifyVideoChange();
+#endif
 }
 
 /* TODO: Properly set window parameters and remove this routine.

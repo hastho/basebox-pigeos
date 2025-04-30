@@ -334,6 +334,9 @@ inline uint8_t CURSOR_POS_ROW(const uint8_t page)
 void INT10_SetupPalette();
 
 bool INT10_SetVideoMode(uint16_t mode);
+#if C_GEOSHOST
+uint8_t VESA_SetBaseboxMode(uint16_t width, uint16_t height);
+#endif
 void INT10_SetCurMode(void);
 bool INT10_VideoModeChangeInProgress();
 

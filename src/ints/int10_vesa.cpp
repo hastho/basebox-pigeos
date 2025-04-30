@@ -401,6 +401,33 @@ uint8_t VESA_SetSVGAMode(uint16_t mode) {
 	return VESA_FAIL;
 }
 
+#if C_GEOSHOST
+uint8_t VESA_SetBaseboxMode(uint16_t width, uint16_t height)
+{
+	// setup mode first
+	// Find the requested mode in our table of VGA modes
+	assert(ModeList_VGA.size());
+	for (auto& v : ModeList_VGA) {
+		if (v.mode == 0x89A) {
+			v.swidth = width;
+			v.sheight = height;
+			v.vtotal  = height+50;
+			v.vdispend = height;
+			v.hdispend = width/4;
+			LOG_INFO("found something");
+			break;
+		}
+	}
+
+	uint16_t mode = 0x89A;
+	if (INT10_SetVideoMode(mode)) {
+		int10.vesa_setmode = mode & 0x7fff;
+		return VESA_SUCCESS;
+	}
+	return VESA_FAIL;
+}
+#endif
+
 uint8_t VESA_GetSVGAMode(uint16_t & mode) {
 	if (int10.vesa_setmode!=0xffff) mode=int10.vesa_setmode;
 	else mode=CurMode->mode;

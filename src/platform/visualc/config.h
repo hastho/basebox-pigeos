@@ -21,6 +21,9 @@
 /* Define to 1 to enable slirp networking support, requires libslirp */
 #define C_SLIRP 1
 
+/* Define to 1 to enable GEOS host api support */
+#define C_GEOSHOST 1
+
 /* Define to 1 to enable dual-mouse gaming support using ManyMouse library */
 #define C_MANYMOUSE 1
 

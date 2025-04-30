@@ -868,6 +868,9 @@
     <ClCompile Include="..\src\misc\ethernet.cpp">
       <Filter>src\misc</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\geos\geoshost.cpp">
+      <Filter>src\geos</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\ansi_code_markup.h">
@@ -1248,9 +1251,6 @@
     <ClInclude Include="..\src\gui\render_templates.h">
       <Filter>src\gui</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\gui\shader_manager.h">
-      <Filter>src\gui</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\gui\titlebar.h">
       <Filter>src\gui</Filter>
     </ClInclude>
@@ -1547,6 +1547,9 @@
     <ClInclude Include="..\src\dos\dos_locale.h">
       <Filter>src\dos</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\shader_manager.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\src\winres.rc">
@@ -1681,6 +1684,9 @@
     </Filter>
     <Filter Include="src\libs\zmbv">
       <UniqueIdentifier>{99b19861-c042-4e3e-bf24-ee8a418866f6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\geos">
+      <UniqueIdentifier>{dfb1dd42-b080-45e3-a214-3a5fb769d2a0}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

@@ -125,6 +125,11 @@ void SHELL_Init();
 
 void INT10_Init(Section*);
 
+#if C_GEOSHOST
+// GEOS host configuration and initialisation
+void GeosHost_AddConfigSection(const ConfigPtr& conf);
+#endif
+
 static LoopHandler * loop;
 
 static struct {
@@ -1349,7 +1354,11 @@ void DOSBOX_Init()
 	pstring->SetEnabledOptions({"SLIRP"});
 #endif
 
+#if C_GEOSHOST
+	GeosHost_AddConfigSection(control);
+#endif
 	//	secprop->AddInitFunction(&CREDITS_Init);
+
 
 	// VMM interfaces
 	secprop->AddInitFunction(&VIRTUALBOX_Init);
