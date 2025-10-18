@@ -13,6 +13,7 @@
     "opusfile",
     "sdl2",
     "sdl2-net",
+    "sdl3",
     "speexdsp",
     {
       "name": "tracy",
@@ -24,5 +25,5 @@
       "host": true
     }
   ],
-  "builtin-baseline": "6ebf8c123bc8077dc9216db6438eeabaa154c473"
+  "builtin-baseline": "50c0cb48a0cf2f6fc5c7b2c0d2bafbe26d0a7ca2"
 }

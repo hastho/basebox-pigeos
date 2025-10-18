@@ -871,6 +871,9 @@
     <ClCompile Include="..\src\geos\geoshost.cpp">
       <Filter>src\geos</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\sdl3-net\SDL_net.c">
+      <Filter>src\sdl3-net</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\ansi_code_markup.h">
@@ -1550,6 +1553,9 @@
     <ClInclude Include="..\include\shader_manager.h">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\SDL3_net\SDL_net.h">
+      <Filter>include\sdl3-net</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\src\winres.rc">
@@ -1687,6 +1693,12 @@
     </Filter>
     <Filter Include="src\geos">
       <UniqueIdentifier>{dfb1dd42-b080-45e3-a214-3a5fb769d2a0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\sdl3-net">
+      <UniqueIdentifier>{1e5afeec-1dec-4610-8ee5-da49b0b855ab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\sdl3-net">
+      <UniqueIdentifier>{67d3ce59-32c3-449c-be71-561a38f30640}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

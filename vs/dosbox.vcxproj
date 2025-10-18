@@ -165,6 +165,7 @@
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <EnableManagedIncrementalBuild>true</EnableManagedIncrementalBuild>
     <LinkIncremental>false</LinkIncremental>
+    <IncludePath>c:\workspace\bluewaysw\pcgeos-basebox\vcpkg_installed\x64-windows\x64-windows\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <OutDir>$(Platform)\$(Configuration)\</OutDir>
@@ -262,7 +263,7 @@ IF %ERRORLEVEL% LSS 8 SET ERRORLEVEL = 0</Command>
       <ObjectFileName>$(IntDir)\$(ProjectName)\$(ConfigurationName)\%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>slirp.lib;zlib-ngd.lib;iir.lib;fluidsynth.lib;opengl32.lib;SDL2_netd.lib;winmm.lib;libpng16d.lib;SDL2maind.lib;SDL2d.lib;odbc32.lib;odbccp32.lib;ws2_32.lib;mt32emu.lib;opusfile.lib;opus.lib;ogg.lib;speexdsp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>slirp.lib;zlib-ngd.lib;iir.lib;libfluidsynth-3.lib;opengl32.lib;winmm.lib;libpng16d.lib;SDL2maind.lib;SDL2d.lib;SDL2_netd.lib;SDL3.lib;odbc32.lib;odbccp32.lib;ws2_32.lib;mt32emu.lib;opusfile.lib;opus.lib;ogg.lib;speexdsp.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)\dosbox.exe</OutputFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
@@ -868,6 +869,9 @@ IF %ERRORLEVEL% LSS 8 SET ERRORLEVEL = 0</Command>
     <ClCompile Include="..\src\misc\string_utils.cpp" />
     <ClCompile Include="..\src\misc\support.cpp" />
     <ClCompile Include="..\src\misc\unicode.cpp" />
+    <ClCompile Include="..\src\sdl3-net\SDL_net.c">
+      <LanguageStandard_C Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdclatest</LanguageStandard_C>
+    </ClCompile>
     <ClCompile Include="..\src\shell\autoexec.cpp" />
     <ClCompile Include="..\src\shell\command_line.cpp" />
     <ClCompile Include="..\src\shell\file_reader.cpp" />
@@ -951,6 +955,7 @@ IF %ERRORLEVEL% LSS 8 SET ERRORLEVEL = 0</Command>
     <ClInclude Include="..\include\rgb666.h" />
     <ClInclude Include="..\include\rgb888.h" />
     <ClInclude Include="..\include\rwqueue.h" />
+    <ClInclude Include="..\include\SDL3_net\SDL_net.h" />
     <ClInclude Include="..\include\sdlmain.h" />
     <ClInclude Include="..\include\serialport.h" />
     <ClInclude Include="..\include\setup.h" />

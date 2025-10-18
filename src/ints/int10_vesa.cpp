@@ -404,6 +404,21 @@ uint8_t VESA_SetSVGAMode(uint16_t mode) {
 #if C_GEOSHOST
 uint8_t VESA_SetBaseboxMode(uint16_t width, uint16_t height)
 {
+#define MAX_SCREEN_WIDTH	2040
+#define MAX_SCREEN_HEIGHT	1536
+
+	if (width > MAX_SCREEN_WIDTH) {
+	
+		height = (MAX_SCREEN_WIDTH * height) / width;
+		width  = MAX_SCREEN_WIDTH;
+	}
+
+	if (height > MAX_SCREEN_HEIGHT) {
+
+		width = (MAX_SCREEN_HEIGHT * width) / height;
+		height = MAX_SCREEN_HEIGHT;
+	}
+
 	// setup mode first
 	// Find the requested mode in our table of VGA modes
 	assert(ModeList_VGA.size());
@@ -414,7 +429,7 @@ uint8_t VESA_SetBaseboxMode(uint16_t width, uint16_t height)
 			v.vtotal  = height+50;
 			v.vdispend = height;
 			v.hdispend = width/4;
-			LOG_INFO("found something");
+			LOG_INFO("found something %d %d", width, height);
 			break;
 		}
 	}

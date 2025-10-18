@@ -517,6 +517,8 @@ public:
 		else
 			LOG_WARNING("SDLNET: failed to initialize SDL network subsystem: %s\n",
 			            SDLNet_GetError());
+
+		NET_Init();
 	}
 
 	~sdl_net_manager_t()
@@ -526,6 +528,7 @@ public:
 
 		assert(already_tried_once);
 		SDLNet_Quit();
+		NET_Quit();
 		LOG_INFO("SDLNET: Shutdown SDL network subsystem");
 	}
 
