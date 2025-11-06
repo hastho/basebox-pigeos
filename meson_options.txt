@@ -210,6 +210,7 @@ option(
         'png',
         'sdl2',
         'sdl2_net',
+        'sdl3',
         'slirp',
         'speexdsp',
         'tracy',
