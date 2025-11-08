@@ -112,8 +112,30 @@
 #ifndef SDL_NET3_H_
 #define SDL_NET3_H_
 
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_begin_code.h>
+#include <SDL.h>
+#include <begin_code.h>
+
+#ifndef __cplusplus
+typedef enum { false, true } bool;
+#endif
+
+#define SDL_DECLSPEC DECLSPEC
+
+#define SDL_AtomicInt   SDL_atomic_t
+#define SDL_Mutex       SDL_mutex
+#define SDL_Condition   SDL_cond
+
+#define SDL_GetAtomicInt        SDL_AtomicGet
+#define SDL_GetAtomicPointer    SDL_AtomicGetPtr
+#define SDL_SetAtomicPointer    SDL_AtomicSetPtr
+#define SDL_WaitCondition       SDL_CondWait
+#define SDL_SetAtomicInt        SDL_AtomicSet
+#define SDL_AddAtomicInt        SDL_AtomicAdd
+#define SDL_BroadcastCondition  SDL_CondBroadcast
+#define SDL_CreateCondition     SDL_CreateCond
+#define SDL_DestroyCondition    SDL_DestroyCond
+#define SDL_SignalCondition     SDL_CondSignal
+#define SDL_WaitConditionTimeout    SDL_CondWaitTimeout
 
 /* Set up for C function definitions, even when using C++ */
 #ifdef __cplusplus
@@ -1474,7 +1496,7 @@ extern SDL_DECLSPEC long SDLCALL NET_GetIP4Address(NET_Address* addr);
 #ifdef __cplusplus
 }
 #endif
-#include <SDL3/SDL_close_code.h>
+#include <close_code.h>
 
 #endif /* SDL_NET3_H_ */
 

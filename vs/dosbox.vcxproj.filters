@@ -874,6 +874,9 @@
     <ClCompile Include="..\src\sdl3-net\SDL_net.c">
       <Filter>src\sdl3-net</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\geos\tlse.c">
+      <Filter>src\geos</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\ansi_code_markup.h">
@@ -1556,6 +1559,15 @@
     <ClInclude Include="..\include\SDL3_net\SDL_net.h">
       <Filter>include\sdl3-net</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\geos\libtomcrypt.h">
+      <Filter>src\geos</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\geos\tls_root_ca.h">
+      <Filter>src\geos</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\geos\tlse.h">
+      <Filter>src\geos</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\src\winres.rc">
@@ -1700,5 +1712,10 @@
     <Filter Include="include\sdl3-net">
       <UniqueIdentifier>{67d3ce59-32c3-449c-be71-561a38f30640}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\src\geos\root.pem">
+      <Filter>src\geos</Filter>
+    </None>
   </ItemGroup>
 </Project>

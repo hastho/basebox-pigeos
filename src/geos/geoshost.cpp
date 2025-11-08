@@ -1,3 +1,5 @@
+#define CPP_MODULE
+
 #include "dosbox.h"
 #include "inout.h"
 #include "control.h"
@@ -11,7 +13,10 @@
 #include "../ints/int10.h"
 #include <SDL.h>
 #include <SDL_net.h>
+
 #include <SDL3_net/SDL_net.h>
+
+#include "tlse.h"
 
 #if C_GEOSHOST
 
@@ -24,7 +29,14 @@
 #define HIF_API_SSL		2
 #define HIF_API_SOCKET	3
 
-#define HIF_NOTIFY_DISPLAY_SIZE_CHANGE	1
+#define HIF_SLOT_AX		0
+#define HIF_SLOT_SI		1
+#define HIF_SLOT_BX		2
+#define HIF_SLOT_CX		3
+#define HIF_SLOT_DX		4
+#define HIF_SLOT_DI		5
+
+	#define HIF_NOTIFY_DISPLAY_SIZE_CHANGE	1
 #define HIF_NOTIFY_SOCKET_STATE_CHANGE	2
 
 #define HIF_CHECK_API			98
@@ -54,6 +66,25 @@
 #define HIF_NC_CLOSE            HIF_NETWORKING_BASE + 7
 #define HIF_NC_DISCONNECT       HIF_NETWORKING_BASE + 8
 #define HIF_NETWORKING_END      1199
+
+#define HIF_SSL_BASE				 1200
+#define HIF_SSL_V2_GET_CLIENT_METHOD HIF_SSL_BASE
+#define HIF_SSL_SSLEAY_ADD_SSL_ALGO  HIF_SSL_BASE + 1
+#define HIF_SSL_CTX_NEW              HIF_SSL_BASE + 2
+#define HIF_SSL_CTX_FREE             HIF_SSL_BASE + 3
+#define HIF_SSL_NEW                  HIF_SSL_BASE + 4
+#define HIF_SSL_FREE                 HIF_SSL_BASE + 5
+#define HIF_SSL_SET_FD               HIF_SSL_BASE + 6
+#define HIF_SSL_CONNECT              HIF_SSL_BASE + 7
+#define HIF_SSL_SHUTDOWN             HIF_SSL_BASE + 8
+#define HIF_SSL_READ                 HIF_SSL_BASE + 9
+#define HIF_SSL_WRITE                HIF_SSL_BASE + 10
+#define HIF_SSL_V23_CLIENT_METHOD    HIF_SSL_BASE + 11
+#define HIF_SSL_V3_CLIENT_METHOD     HIF_SSL_BASE + 12
+#define HIF_SSL_GET_SSL_METHOD       HIF_SSL_BASE + 13
+#define HIF_SSL_SET_CALLBACK         HIF_SSL_BASE + 14
+#define HIF_SSL_SET_TLSEXT_HOST_NAME HIF_SSL_BASE + 15
+#define HIF_SSL_END                  1299
 
 
 const static char G_baseboxID[] = "XOBESAB2";
@@ -796,6 +827,57 @@ void GeosHost_NotifySocketChange()
 	GeosHost_SendEvent(eventRecord);
 }
 
+#define MAX_HANDLES 20
+
+static void* handles[MAX_HANDLES];
+
+static int AllocHandle(void* ptr)
+{
+
+	int handle = 0;
+	while (handle < MAX_HANDLES) {
+
+		if (handles[handle] == NULL) {
+
+			handles[handle] = ptr;
+			return handle + 1;
+		}
+		handle++;
+	}
+
+	return 0;
+}
+
+int SSLSocketRecv(int socket, void* buffer, size_t length, int flags)
+{
+	LOG_MSG("!!!SSLSocketRecv");
+	SocketState& sock = NetSockets[socket];
+
+	LOG_MSG("\n!!!SSLSocketRecv start wait %x", &sock);
+	while (!sock.sslInitialEnd) {
+	};
+	LOG_MSG("\n!!!SSLSocketRecv done wait");
+
+	if (sock.recvBufUsed) {
+		int recvSize = sock.recvBufUsed;
+		memcpy(buffer, sock.recvBuf, recvSize);
+		sock.recvBufUsed = 0;
+		return recvSize;
+	}
+
+	return SDLNet_TCP_Recv(sock.socket, buffer, length);
+}
+
+int SSLSocketSend(int socket, const void* buffer, size_t length, int flags)
+{
+	LOG_MSG("!!!SSLSocketSend");
+	SocketState& sock = NetSockets[socket];
+
+	sock.ssl = true;
+
+	return SDLNet_TCP_Send(sock.socket, buffer, length);
+}
+
 static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 {
 	// we receive command bytes on this io port, works like a
@@ -853,7 +935,9 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 					    resultVersion = 1;
 					    break;
 				    case HIF_API_SSL:
-					default: 
+						//resultVersion = 1;
+						//break;
+				    default: 
 						resultVersion = 0; /* any other unsupported API: not supported */
 				}
 				G_responseBuffer[5] = resultVersion; /* minor (compatibility)
@@ -1191,6 +1275,27 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 					}
 					sock.used = false;
 				}
+				G_responseOffset = 6;
+
+			} else if (G_commandBuffer[0] == HIF_SSL_CTX_NEW) {
+				LOG_MSG("!!!SSLContextNew");
+
+				int method = 0; // client method
+
+				int handle = AllocHandle(
+				        tls_create_context(method, TLS_V12));
+
+				SSL_set_io(reinterpret_cast<struct TLSContext*>(
+				                   handles[handle - 1]),
+				           (void*)SSLSocketRecv,
+				           (void*)SSLSocketSend);
+
+				//reg_ax = handle & 0xFFFF;
+				//reg_dx = (handle >> 16) & 0xFFFF;
+				LOG_MSG("!!!SSLContextNew context %x", handle);
+				G_responseBuffer[HIF_SLOT_AX] = HIF_OK;
+				G_responseBuffer[HIF_SLOT_DX] = handle & 0xFFFF;
+				G_responseOffset    = 6;
 
 			} else {
 

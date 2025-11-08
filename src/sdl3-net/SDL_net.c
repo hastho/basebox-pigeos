@@ -30,6 +30,8 @@
 #endif
 #endif /* _WIN32 */
 
+#define SDL_PLATFORM_WINDOWS
+
 #include "SDL3_net/SDL_net.h"
 
 
@@ -239,18 +241,23 @@ static SDL_AtomicInt resolver_num_threads;
 static SDL_AtomicInt resolver_num_requests;
 static SDL_AtomicInt resolver_percent_loss;
 
+#if 0
 // between lo and hi (inclusive; it can return lo or hi itself, too!).
 static int RandomNumberBetween(const int lo, const int hi)
 {
     return SDL_rand(((hi + 1) - lo)) + lo;
 }
+#endif
 
 static bool ShouldSimulateLoss(const int percent_likely_to_lose)
 {
+#if 0
     // these should be clamped when assigning them.
     SDL_assert(percent_likely_to_lose >= 0);
     SDL_assert(percent_likely_to_lose <= 100);
     return (percent_likely_to_lose > 0) ? (RandomNumberBetween(0, 100) < percent_likely_to_lose) : false;
+#endif
+	return false;
 }
 
 static int CloseSocketHandle(Socket handle)
@@ -397,7 +404,9 @@ static int SDLCALL ResolverThread(void *data)
 
         if (ShouldSimulateLoss(simulated_loss)) {
             // won the percent_loss lottery? Delay resolving this address between 250 and 7000 milliseconds
+#if 0
             SDL_Delay(RandomNumberBetween(250, 2000 + (50 * simulated_loss)));
+#endif
         }
 
         NET_Status outcome;
@@ -433,6 +442,7 @@ static SDL_Thread *SpinResolverThread(const int num)
     SDL_snprintf(name, sizeof (name), "SDLNetRslv%d", num);
     SDL_assert(resolver_threads[num] == NULL);
     SDL_AddAtomicInt(&resolver_num_threads, 1);
+#if 0
     const SDL_PropertiesID props = SDL_CreateProperties();
     SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_ENTRY_FUNCTION_POINTER, (void *) ResolverThread);
     SDL_SetStringProperty(props, SDL_PROP_THREAD_CREATE_NAME_STRING, name);
@@ -440,6 +450,9 @@ static SDL_Thread *SpinResolverThread(const int num)
     SDL_SetNumberProperty(props, SDL_PROP_THREAD_CREATE_STACKSIZE_NUMBER, 64 * 1024);
     resolver_threads[num] = SDL_CreateThreadWithProperties(props);
     SDL_DestroyProperties(props);
+#else
+    resolver_threads[num] = SDL_CreateThread(ResolverThread, name, &num);
+#endif
     if (!resolver_threads[num]) {
         SDL_AddAtomicInt(&resolver_num_threads, -1);
     }
@@ -1408,12 +1421,15 @@ NET_Address *NET_GetStreamSocketAddress(NET_StreamSocket *sock)
 
 static void UpdateStreamSocketSimulatedFailure(NET_StreamSocket *sock)
 {
+#if 0
     if (ShouldSimulateLoss(sock->percent_loss)) {
         // won the percent_loss lottery? Refuse to move more data for between 250 and 7000 milliseconds.
         sock->simulated_failure_until = SDL_GetTicks() + (Uint64) (RandomNumberBetween(250, 2000 + (50 * sock->percent_loss)));
     } else {
         sock->simulated_failure_until = 0;
     }
+#endif
+	sock->simulated_failure_until = 0;
 }
 
 // see if any pending data can finally be sent, etc
