@@ -26,6 +26,9 @@
 #ifndef TLSE_C
 #define TLSE_C
 
+#undef TLS_AMALGAMATION
+#define TLS_AMALGAMATION
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

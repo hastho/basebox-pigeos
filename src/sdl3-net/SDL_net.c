@@ -30,7 +30,9 @@
 #endif
 #endif /* _WIN32 */
 
+#ifdef _WIN32
 #define SDL_PLATFORM_WINDOWS
+#endif
 
 #include "SDL3_net/SDL_net.h"
 

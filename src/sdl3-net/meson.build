@@ -7,7 +7,7 @@ libsdl3net = static_library(
     libsdl3net_sources,
     include_directories: incdir,
     dependencies: [
-        sdl3_dep,
+        sdl2_dep,
     ],
 )
 

@@ -9,7 +9,6 @@ libgeos = static_library(
     dependencies: [
         sdl2_dep,
         sdl2_net_dep,
-	sdl3_dep,
     ],
 )
 

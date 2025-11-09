@@ -722,36 +722,6 @@ sdl2_dep = dependency(
     include_type: 'system',
 )
 
-sdl3_dep = dependency(
-    'sdl3',
-    version: ['>= 3.0.0', '<4'],
-    static: ('sdl3' in static_libs_list or prefers_static_libs),
-    default_options: default_wrap_options
-    + [
-        'assertions=' + (is_optimized_buildtype ? 'disabled' : 'enabled'),
-        'prefer_dlopen=true',
-        'test=' + wants_tests.to_string(),
-        'use_audio=enabled',
-        'use_events=enabled',
-        'use_joystick=enabled',
-        'use_loadso=enabled',
-        'use_timers=enabled',
-        'use_video=enabled',
-
-        'use_dummies=false',
-        'system_iconv=disabled',
-        'use_atomic=enabled',
-        'use_file=disabled',
-        'use_filesystem=disabled',
-        'use_hidapi=disabled',
-        'use_haptic=disabled',
-        'use_locale=disabled',
-        'use_sensor=disabled',
-        'use_power=disabled',
-    ],
-    include_type: 'system',
-)
-
 # zlib
 # ~~~~
 zlib_provider = 'none'
