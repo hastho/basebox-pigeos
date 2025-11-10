@@ -347,7 +347,7 @@ static void GeosHost_TickHandler(void) {
 	// if in the matching operation mode: real mode or protected mode
 	if (G_eventInterrupt && (G_protectedOpMode == cpu.pmode)) {
 		// if event interrupt is requested
-		if (G_recheckEventInterrupt) {
+		if (G_recheckEventInterrupt && !(reg_flags & FLAG_IF)) {
 
 			SDL_mutexP(G_eventQueueMutex);
 			G_recheckEventInterrupt = false;
@@ -627,8 +627,8 @@ uint16_t AsyncSocketConnect::PollStatus() {
 					m_State     = DONE;
 					m_Result[0] = HIF_FAILED;
 				}
-			}
 			NET_UnrefAddress(m_Addr);
+			}
 		}
 		break;
 	case CONNECTING:
@@ -1275,7 +1275,8 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 					}
 					sock.used = false;
 				}
-				G_responseOffset = 6;
+				G_responseBuffer[0] = HIF_OK;
+				G_responseOffset    = 6;
 
 			} else if (G_commandBuffer[0] == HIF_SSL_CTX_NEW) {
 				LOG_MSG("!!!SSLContextNew");
