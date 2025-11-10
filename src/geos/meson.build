@@ -1,5 +1,6 @@
 libgeos_sources = files(
     'geoshost.cpp',
+    'tlse.c',
 )
 
 libgeos = static_library(
