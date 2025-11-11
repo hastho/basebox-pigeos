@@ -286,6 +286,7 @@ static const int MaxSockets = 256;
 
 static SocketState NetSockets[MaxSockets];
 
+static uint64_t lastTick = 0;
 
 EventRecord* G_eventRecords = NULL;
 AsyncOp* G_opRecords = NULL;
@@ -347,16 +348,25 @@ static void GeosHost_TickHandler(void) {
 	// if in the matching operation mode: real mode or protected mode
 	if (G_eventInterrupt && (G_protectedOpMode == cpu.pmode)) {
 		// if event interrupt is requested
-		if (G_recheckEventInterrupt && !(reg_flags & FLAG_IF)) {
+		uint64_t thisTick = SDL_GetTicks64();
+		if ((G_recheckEventInterrupt || (G_eventRecords && ((thisTick - lastTick) > 500))) && !(reg_flags & FLAG_IF)) {
+
+			static int intCounter = 0;
+
+			lastTick = thisTick;
 
 			SDL_mutexP(G_eventQueueMutex);
 			G_recheckEventInterrupt = false;
 			SDL_mutexV(G_eventQueueMutex);
 			// issue software interrupt
-			LOG_INFO("GEOSHOST: Trigger event interrupt");
+			int thisIntCount = intCounter++;
+
+			LOG_INFO("GEOSHOST: Trigger event interrupt (#%d)",
+			         thisIntCount);
 
 			CPU_SW_Interrupt(G_eventInterrupt, reg_eip);
-			DOSBOX_RunMachine();
+			//DOSBOX_RunMachine();
+			LOG_INFO("GEOSHOST: Event interrupt done (#%d)", thisIntCount);
 		} 
 	}
 }
@@ -381,7 +391,7 @@ void GeosHost_SendEvent(uint16_t* eventRecord)
 	if (G_eventRecords == NULL) {
 		G_recheckEventInterrupt = true;
 	}
-	//G_recheckEventInterrupt = true;
+	G_recheckEventInterrupt = true;
 	newRecord->SetNext(G_eventRecords);
 	G_eventRecords = newRecord;
 	SDL_mutexV(G_eventQueueMutex);
