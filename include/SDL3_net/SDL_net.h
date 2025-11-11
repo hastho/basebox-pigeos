@@ -137,6 +137,8 @@ typedef enum { false, true } bool;
 #define SDL_SignalCondition     SDL_CondSignal
 #define SDL_WaitConditionTimeout    SDL_CondWaitTimeout
 
+#define SDL_clamp(x, a, b) (((x) < (a)) ? (a) : (((x) > (b)) ? (b) : (x)))
+
 /* Set up for C function definitions, even when using C++ */
 #ifdef __cplusplus
 extern "C" {
