@@ -84,6 +84,7 @@
 #define HIF_SSL_GET_SSL_METHOD       HIF_SSL_BASE + 13
 #define HIF_SSL_SET_CALLBACK         HIF_SSL_BASE + 14
 #define HIF_SSL_SET_TLSEXT_HOST_NAME HIF_SSL_BASE + 15
+#define HIF_SSL_SET_SSL_METHOD		 HIF_SSL_BASE + 16
 #define HIF_SSL_END                  1299
 
 
@@ -238,7 +239,88 @@ public:
 	uint16_t PollStatus();
 };
 
+class AsyncSSLConnect : public AsyncOp {
+private:
+	enum State { IDLE, SENDING, RECEIVING, DONE };
+
+private:
+	State m_State;
+	struct TLSContext* m_ctx;
+	int m_socketHandle;
+	uint8_t m_Buffer[8192];
+
+public:
+	AsyncSSLConnect(AsyncOp* next) : AsyncOp(next)
+	{
+		m_State = IDLE;
+		m_socketHandle = 0;
+		m_ctx          = NULL;
+	};
+	~AsyncSSLConnect() {};
+
+public:
+	uint16_t Init(uint16_t* cmdRec);
+
+public:
+	uint16_t RunAsync();
+	uint16_t PollStatus();
+};
+
+class AsyncSSLWrite : public AsyncOp {
+private:
+
+private:
+	struct TLSContext* m_ctx;
+	int m_socketHandle;
+	uint8_t m_Buffer[8192];
+	int m_written;
+
+public:
+	AsyncSSLWrite(AsyncOp* next) : AsyncOp(next)
+	{
+		m_socketHandle = 0;
+		m_ctx          = NULL;
+	};
+	~AsyncSSLWrite() {};
+
+public:
+	uint16_t Init(uint16_t* cmdRec);
+
+public:
+	uint16_t RunAsync();
+	uint16_t PollStatus();
+};
+
+
+class AsyncSSLRead : public AsyncOp {
+private:
+private:
+	struct TLSContext* m_ctx;
+	int m_socketHandle;
+	uint8_t m_Buffer[8192];
+
+	uint16_t m_BufferSegment;
+	uint16_t m_BufferOffset;
+	uint16_t m_BufferSize;
+
+public:
+	AsyncSSLRead(AsyncOp* next) : AsyncOp(next)
+	{
+		m_socketHandle = 0;
+		m_ctx          = NULL;
+	};
+	~AsyncSSLRead() {};
+
+public:
+	uint16_t Init(uint16_t* cmdRec);
+
+public:
+	uint16_t RunAsync();
+	uint16_t PollStatus();
+};
+
 class AsyncSocketSend : public AsyncOp {
+
 private:
 
 private:
@@ -295,6 +377,7 @@ static void PollSockets() {
 
 	for (int i = 1; i < MaxSockets; i++) {
 		if (NetSockets[i].used && NetSockets[i].open &&
+		    !NetSockets[i].ssl &&
 		    !NetSockets[i].receiveDone &&
 		    !NetSockets[i].done && (NetSockets[i].recvBufUsed <= 0)) {
 			if (NetSockets[i].recvBuf == NULL) {
@@ -834,6 +917,7 @@ void GeosHost_NotifySocketChange()
 #define MAX_HANDLES 20
 
 static void* handles[MAX_HANDLES];
+static uint16_t associatdSocket[MAX_HANDLES];
 
 static int AllocHandle(void* ptr)
 {
@@ -880,6 +964,305 @@ int SSLSocketSend(int socket, const void* buffer, size_t length, int flags)
 	sock.ssl = true;
 
 	return SDLNet_TCP_Send(sock.socket, buffer, length);
+}
+
+uint16_t 
+AsyncSSLConnect::Init(uint16_t* cmdRec) {
+
+	m_RunOwnThread = false;
+
+	int handle = G_commandBuffer[HIF_SLOT_SI];
+	LOG_MSG("!!!AsyncSSLConnect::Init %x", handle);
+
+	m_ctx = reinterpret_cast<struct TLSContext*>(
+	        handles[handle - 1]);
+	m_socketHandle = associatdSocket[handle - 1];
+
+	int res = tls_client_connect(m_ctx);
+	if (res < 0) {
+		return HIF_FAILED;
+	}
+
+	unsigned int out_buffer_len;
+	const unsigned char* out_buffer = tls_get_write_buffer(m_ctx, &out_buffer_len);
+
+	bool result = NET_WriteToStreamSocket(NetSockets[m_socketHandle].stream,
+	                                      out_buffer,
+	                                      out_buffer_len);
+	if (!result) {
+		return HIF_FAILED;
+	}
+
+	m_State = SENDING;
+
+	return AsyncOp::Init(cmdRec);
+}
+
+uint16_t 
+AsyncSSLConnect::RunAsync() {
+
+}
+
+int validate_certificate(struct TLSContext* context,
+                         struct TLSCertificate** certificate_chain, int len)
+{
+	int i;
+	int err;
+	if (certificate_chain) {
+		for (i = 0; i < len; i++) {
+			struct TLSCertificate* certificate = certificate_chain[i];
+			// check validity date
+			err = tls_certificate_is_valid(certificate);
+			if (err) {
+				return err;
+			}
+			// check certificate in certificate->bytes of length
+			// certificate->len the certificate is in ASN.1 DER format
+		}
+	}
+	// check if chain is valid
+	err = tls_certificate_chain_is_valid(certificate_chain, len);
+	if (err) {
+		return err;
+	}
+
+	const char* sni = tls_sni(context);
+	if ((len > 0) && (sni)) {
+		err = tls_certificate_valid_subject(certificate_chain[0], sni);
+		if (err) {
+			return err;
+		}
+	}
+
+	fprintf(stderr, "Certificate OK\n");
+
+	// return certificate_expired;
+	// return certificate_revoked;
+	// return certificate_unknown;
+	return no_error;
+}
+
+
+uint16_t 
+AsyncSSLConnect::PollStatus() {
+	SocketState& sock = NetSockets[m_socketHandle];
+	switch (m_State) {
+	
+	case SENDING:
+		if (sock.stream) {
+			int pendingCount = NET_GetStreamSocketPendingWrites(
+			        sock.stream);
+			if (pendingCount == 0) {
+
+				// successfully sent
+				tls_buffer_clear(m_ctx);
+
+				if (tls_established(m_ctx) == 1) {
+				
+					m_Result[0] = HIF_OK;
+					m_Result[HIF_SLOT_DX] = 1;
+					m_State               = DONE;
+				} 
+				else
+				{
+					m_State = RECEIVING;
+				}
+
+			} else if (pendingCount < 0) {
+				m_Result[0] = HIF_FAILED;
+				m_State     = DONE;
+			}
+		}
+		break;
+	case RECEIVING: {
+		int result = NET_ReadFromStreamSocket(sock.stream,
+		                                      m_Buffer,
+		                                      sizeof(m_Buffer));
+			if (result < 0) {
+				// handle error situation
+				sock.receiveDone   = true;
+				sock.sslInitialEnd = true;
+				GeosHost_NotifySocketChange();
+
+				m_Result[0] = HIF_FAILED;
+				m_State     = DONE;
+
+			} else if (result > 0) {
+
+				// some data to consume
+			        tls_consume_stream(m_ctx,
+			                           m_Buffer,
+			                           result,
+			                           validate_certificate);
+
+				// restart sending
+				if (tls_established(m_ctx) == 1) {
+
+					m_Result[0] = HIF_OK;
+				    m_Result[HIF_SLOT_DX] = 1;
+					m_State     = DONE;
+				} 
+				else {
+				    unsigned int out_buffer_len;
+				    const unsigned char* out_buffer =
+				            tls_get_write_buffer(m_ctx,
+				                                    &out_buffer_len);
+
+				    if (out_buffer) {
+					    m_State = SENDING;
+					    bool result = NET_WriteToStreamSocket(
+					            NetSockets[m_socketHandle]
+					                    .stream,
+					            out_buffer,
+					            out_buffer_len);
+					    if (!result) {
+						    return HIF_FAILED;
+					    }
+				    }
+			    }
+		     }
+		}
+		break;
+	}
+
+	return 0;
+}
+
+uint16_t 
+AsyncSSLWrite::Init(uint16_t* cmdRec) {
+
+	m_RunOwnThread = false;
+
+	int handle = G_commandBuffer[HIF_SLOT_SI];
+	LOG_MSG("!!!AsyncSSLConnect::Init %x", handle);
+
+	m_ctx = reinterpret_cast<struct TLSContext*>(handles[handle - 1]);
+	m_socketHandle = associatdSocket[handle - 1];
+
+	uint32_t dosBuff = static_cast<uint32_t>(G_commandBuffer[4] << 4) +
+	                   G_commandBuffer[3];
+	int size = cmdRec[5];
+	LOG_MSG("NetSendData data size: %d", size);
+
+	char* buffer = new char[size + 1];
+	for (int i = 0; i < size; i++) {
+		buffer[i] = mem_readb(dosBuff + i);
+	}
+	buffer[size] = 0;
+
+    m_written = tls_write(m_ctx, (const unsigned char*) buffer, (unsigned int) size);
+	if (m_written < 0) {
+	    return HIF_FAILED;
+    }
+
+	unsigned int out_buffer_len;
+	const unsigned char* out_buffer = tls_get_write_buffer(m_ctx, &out_buffer_len);
+
+	bool result = NET_WriteToStreamSocket(NetSockets[m_socketHandle].stream,
+	                                      out_buffer,
+	                                      out_buffer_len);
+	if (!result) {
+		return HIF_FAILED;
+	}
+
+	return AsyncOp::Init(cmdRec);
+}
+
+uint16_t 
+AsyncSSLWrite::RunAsync() {
+
+}
+
+uint16_t 
+AsyncSSLWrite::PollStatus() {
+
+	SocketState& sock = NetSockets[m_socketHandle];
+	if (sock.stream) {
+		int pendingCount = NET_GetStreamSocketPendingWrites(
+			    sock.stream);
+		if (pendingCount == 0) {
+
+			// successfully sent
+			tls_buffer_clear(m_ctx);
+
+			m_Result[0] = HIF_OK;
+			m_Result[HIF_SLOT_DX] = m_written;
+
+		} else if (pendingCount < 0) {
+			m_Result[0] = HIF_FAILED;
+		}
+	}
+
+	return 0;
+}
+
+
+uint16_t AsyncSSLRead::Init(uint16_t* cmdRec)
+{
+
+	m_RunOwnThread = false;
+
+	int handle = G_commandBuffer[HIF_SLOT_SI];
+	LOG_MSG("!!!AsyncSSLConnect::Init %x", handle);
+
+	m_ctx = reinterpret_cast<struct TLSContext*>(handles[handle - 1]);
+	m_socketHandle = associatdSocket[handle - 1];
+
+	m_BufferSegment  = G_commandBuffer[4];
+	m_BufferOffset   = G_commandBuffer[3];
+	m_BufferSize     = cmdRec[5];
+
+	return AsyncOp::Init(cmdRec);
+}
+
+uint16_t AsyncSSLRead::RunAsync() {}
+
+uint16_t AsyncSSLRead::PollStatus()
+{
+	int read_size = tls_read(m_ctx,
+	                         m_Buffer,
+	                         m_BufferSize > sizeof(m_Buffer) ? sizeof(m_Buffer)
+	                                                         : m_BufferSize);
+	if (read_size > 0) {
+
+		// done some
+		m_Result[0]           = HIF_OK;
+		m_Result[HIF_SLOT_DX] = read_size;
+	
+		for (int i2 = 0; i2 < read_size; i2++) {
+			mem_writeb(static_cast<uint32_t>(m_BufferSegment << 4) +
+			                   m_BufferOffset + i2,
+						m_Buffer[i2]);
+		};
+
+
+	} else {
+		SocketState& sock = NetSockets[m_socketHandle];
+		if (sock.stream) {
+
+			int result = NET_ReadFromStreamSocket(sock.stream,
+			                                      m_Buffer,
+			                                      sizeof(m_Buffer));
+			if (result < 0) {
+				// handle error situation
+				sock.receiveDone   = true;
+				sock.sslInitialEnd = true;
+				GeosHost_NotifySocketChange();
+
+				m_Result[0] = HIF_FAILED;
+
+			} else if (result > 0) {
+
+				// some data to consume
+				tls_consume_stream(m_ctx,
+				                   m_Buffer,
+				                   result,
+				                   validate_certificate);
+			}
+		}
+	}
+
+	return 0;
 }
 
 static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
@@ -939,8 +1322,8 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 					    resultVersion = 1;
 					    break;
 				    case HIF_API_SSL:
-						//resultVersion = 1;
-						//break;
+						resultVersion = 1;
+						break;
 				    default: 
 						resultVersion = 0; /* any other unsupported API: not supported */
 				}
@@ -1290,10 +1673,10 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				int handle = AllocHandle(
 				        tls_create_context(method, TLS_V12));
 
-				SSL_set_io(reinterpret_cast<struct TLSContext*>(
-				                   handles[handle - 1]),
-				           (void*)SSLSocketRecv,
-				           (void*)SSLSocketSend);
+				//SSL_set_io(reinterpret_cast<struct TLSContext*>(
+				//                   handles[handle - 1]),
+				//           (void*)SSLSocketRecv,
+				//           (void*)SSLSocketSend);
 
 				//reg_ax = handle & 0xFFFF;
 				//reg_dx = (handle >> 16) & 0xFFFF;
@@ -1301,6 +1684,148 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				G_responseBuffer[HIF_SLOT_AX] = HIF_OK;
 				G_responseBuffer[HIF_SLOT_DX] = handle & 0xFFFF;
 				G_responseOffset    = 6;
+
+			} else if (G_commandBuffer[0] == HIF_SSL_NEW) {
+
+				LOG_MSG("!!!SSLNew(%x)", SDL_ThreadID());
+
+				int handle = G_commandBuffer[HIF_SLOT_SI];
+
+				struct TLSContext* context = reinterpret_cast<struct TLSContext*>(
+				        handles[handle - 1]);
+
+				LOG_MSG("!!!SSLNew context %d, %x", handle, context);
+
+				int method    = 0; // client method
+				int newHandle = AllocHandle(
+				        tls_create_context(method, TLS_V12));
+
+				LOG_MSG("!!!SSLNew result %d", newHandle);
+				G_responseBuffer[HIF_SLOT_AX] = HIF_OK;
+				G_responseBuffer[HIF_SLOT_DX] = newHandle & 0xFFFF;
+				G_responseOffset              = 6;
+
+			} 
+			else if (G_commandBuffer[0] == HIF_SSL_SET_SSL_METHOD) {
+				
+				G_responseBuffer[HIF_SLOT_AX] = HIF_FAILED;
+				G_responseBuffer[HIF_SLOT_DX] = 0;
+				G_responseOffset = 6;
+			} 
+			else if (G_commandBuffer[0] == HIF_SSL_SET_FD) {
+
+				int handle = G_commandBuffer[HIF_SLOT_SI];
+				LOG_MSG("!!!SSLSetFD %x", handle);
+
+				int socket = G_commandBuffer[HIF_SLOT_DI];
+				associatdSocket[handle - 1] = socket;
+
+				NetSockets[socket].ssl = true;
+
+				G_responseBuffer[HIF_SLOT_AX] = HIF_FAILED;
+				G_responseBuffer[HIF_SLOT_DX] = 0;
+				G_responseOffset              = 6;
+			} 
+			else if (G_commandBuffer[0] == HIF_SSL_SET_TLSEXT_HOST_NAME) {
+
+				char host[256];
+				LOG_MSG("!!!HIF_SSL_SET_TLSEXT_HOST_NAME");
+
+				int handle  = G_commandBuffer[HIF_SLOT_SI];
+				LOG_MSG("!!!SSLSetTLSEXT_HOST_NAME %x", handle);
+
+				struct TLSContext* ctx =
+				        reinterpret_cast<struct TLSContext*>(
+				                handles[handle - 1]);
+
+				// TODO check buffer size
+				PhysPt dosBuff = (G_commandBuffer[HIF_SLOT_DX] << 4) +
+				                 G_commandBuffer[HIF_SLOT_CX];
+				MEM_StrCopy(dosBuff, host, reg_di); // 1024 toasts
+				                                    // the stack
+				host[G_commandBuffer[HIF_SLOT_DI]] = 0;
+
+				int result = tls_sni_set(ctx, host);
+
+				//reg_ax = result & 0xFFFF;
+				//reg_dx = (result >> 16) & 0xFFFF;
+				G_responseBuffer[HIF_SLOT_AX] = HIF_OK;
+				G_responseBuffer[HIF_SLOT_DX] = 0;
+
+			} else if (G_commandBuffer[0] == HIF_SSL_CONNECT) {
+
+				// allocate async op
+				AsyncOp* newOp = new AsyncSSLConnect(G_opRecords);
+				if (newOp) {
+
+					G_responseBuffer[0] = newOp->Init(
+					        G_commandBuffer);
+
+					if ((G_responseBuffer[0] & 0xFF) !=
+					    HIF_PENDING) {
+
+						delete newOp;
+
+					} else {
+
+						// add op to queue
+						G_opRecords = newOp;
+					}
+				} else {
+
+					G_responseBuffer[0] = HIF_NO_MEMORY;
+				}
+				G_responseOffset = 6;
+
+			} else if (G_commandBuffer[0] == HIF_SSL_WRITE) {
+
+				// allocate async op
+				AsyncOp* newOp = new AsyncSSLWrite(G_opRecords);
+				if (newOp) {
+
+					G_responseBuffer[0] = newOp->Init(
+					        G_commandBuffer);
+
+					if ((G_responseBuffer[0] & 0xFF) !=
+					    HIF_PENDING) {
+
+						delete newOp;
+
+					} else {
+
+						// add op to queue
+						G_opRecords = newOp;
+					}
+				} else {
+
+					G_responseBuffer[0] = HIF_NO_MEMORY;
+				}
+				G_responseOffset = 6;
+
+			} else if (G_commandBuffer[0] == HIF_SSL_READ) {
+
+				// allocate async op
+				AsyncOp* newOp = new AsyncSSLRead(G_opRecords);
+				if (newOp) {
+
+					G_responseBuffer[0] = newOp->Init(
+					        G_commandBuffer);
+
+					if ((G_responseBuffer[0] & 0xFF) !=
+					    HIF_PENDING) {
+
+						delete newOp;
+
+					} else {
+
+						// add op to queue
+						G_opRecords = newOp;
+					}
+				} else {
+
+					G_responseBuffer[0] = HIF_NO_MEMORY;
+				}
+				G_responseOffset = 6;
 
 			} else {
 
