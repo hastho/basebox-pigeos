@@ -1826,11 +1826,25 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 					G_responseBuffer[0] = HIF_NO_MEMORY;
 				}
 				G_responseOffset = 6;
+			}
+			else if (G_commandBuffer[0] == HIF_SSL_CTX_FREE)
+			{
+				int handle = G_commandBuffer[HIF_SLOT_SI];
+				tls_destroy_context((struct TLSContext *) handles[handle - 1]);
+				handles[handle - 1] = NULL;
 
-			} else {
+				G_responseBuffer[HIF_SLOT_AX] = HIF_OK;
+			} else if (G_commandBuffer[0] == HIF_SSL_FREE) {
+				int handle = G_commandBuffer[HIF_SLOT_SI];
+				
+				tls_destroy_context((struct TLSContext *) handles[handle - 1]);
+				handles[handle - 1] = NULL;
 
-				LOG_INFO("GEOSHOST: Unhandled request code: %d",
-				         G_commandBuffer[0]);			
+				G_responseBuffer[HIF_SLOT_AX] = HIF_OK;
+			} else
+			{
+			LOG_INFO("GEOSHOST: Unhandled request code: %d",
+						G_commandBuffer[0]);			
 			}
 		}
 	}
