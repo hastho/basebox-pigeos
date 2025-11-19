@@ -1359,6 +1359,11 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 					G_responseBuffer[3] = 0; /* horizontal dpi */
 					G_responseBuffer[4] = 0; /* vertical dpi */
 				}
+				LOG_MSG("GEOSHOST: Current host window resolution (x,y,dpi_x,dpi_y): %d, %d, %d, %d",
+				        width,
+				        height,
+				        G_responseBuffer[3],
+				        G_responseBuffer[4]);
 				G_responseBuffer[5] = 0; /* unused */
 				G_responseOffset    = 6;
 			
