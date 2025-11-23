@@ -489,14 +489,30 @@ uint16_t AsyncSocketSend::Init(uint16_t* cmdRec) {
 	} else {
 		SocketState& sock = NetSockets[m_socketHandle];
 
-		uint32_t dosBuff = static_cast<uint32_t>(G_commandBuffer[2] << 4) +
-		                   G_commandBuffer[3];
 		int size = cmdRec[4];
 		LOG_MSG("NetSendData data size: %d", size);
 
 		char* buffer = new char[size + 1];
-		for (int i = 0; i < size; i++) {
-			buffer[i] = mem_readb(dosBuff + i);
+
+		if (G_protectedOpMode) {
+			Descriptor desc;	
+			cpu.gdt.GetDescriptor(G_commandBuffer[2], desc);
+
+			uint32_t dosBuff = static_cast<uint32_t>(
+		                                   desc.GetBase()) +
+		                           G_commandBuffer[3];
+		    for (int i = 0; i < size; i++) {
+				buffer[i] = mem_readb(dosBuff + i);
+			}
+
+		} else {
+
+			uint32_t dosBuff = static_cast<uint32_t>(
+		                                   G_commandBuffer[2] << 4) +
+		                           G_commandBuffer[3];
+		    for (int i = 0; i < size; i++) {
+				buffer[i] = mem_readb(dosBuff + i);
+			}
 		}
 		buffer[size] = 0;
 
@@ -537,10 +553,24 @@ uint16_t AsyncSocketResolveAddr::Init(uint16_t* cmdRec)
 	// si:bx	= host name address
 	// cx = address name len
 	LOG_MSG("\nAsyncSocketResolveAddr::Init: %x %x\n", cmdRec[1], cmdRec[2]);
-	MEM_StrCopy(static_cast<uint32_t>(cmdRec[1] << 4) + cmdRec[2],
-	            m_hostname,
-	            cmdRec[3]); // 1024 toasts the
-	                     // stack
+
+	if (G_protectedOpMode) {
+		Descriptor desc;
+		cpu.gdt.GetDescriptor(cmdRec[1], desc);
+		MEM_StrCopy(static_cast<uint32_t>(desc.GetBase()) +
+		                    cmdRec[2],
+		            m_hostname,
+		            cmdRec[3]); // 1024 toasts the
+		                        // stack
+	} else {
+		MEM_StrCopy(static_cast<uint32_t>(
+		                      cmdRec[1] << 4) +
+		                    cmdRec[2],
+		            m_hostname,
+		            cmdRec[3]); // 1024 toasts the
+		                        // stack
+	}
+	
 	m_hostname[cmdRec[3]] = 0;
 
 #ifdef USE_SDL3
@@ -1332,6 +1362,7 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				G_responseOffset = 6;
 
 			} else if (G_commandBuffer[0] == HIF_SET_EVENT_INTERRUPT) {
+				G_protectedOpMode = cpu.pmode;
 				G_eventInterrupt =
 				        0xA0 /* G_commandBuffer[1] & 0xFF*/;
 			} else if (G_commandBuffer[0] == HIF_GET_VIDEO_PARAMS) {
@@ -1628,17 +1659,38 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 								LOG_MSG("RECEIVENEXT: %x %x",
 								        G_commandBuffer[2],
 								        G_commandBuffer[3]);
-								for (int i2 = 0;
-								     i2 < size;
-								     i2++) {
-									mem_writeb(
-									        static_cast<uint32_t>(
-									                G_commandBuffer[2]
-									                << 4) +
-									                G_commandBuffer[3] +
-									                i2,
-									        NetSockets[i]
-									                .recvBuf[i2]);
+								if (G_protectedOpMode) {
+
+									Descriptor desc;
+									cpu.gdt.GetDescriptor(
+									        G_commandBuffer[2],
+									        desc);
+
+									for (int i2 = 0;
+									     i2 < size;
+									     i2++) {
+										mem_writeb(
+										        static_cast<uint32_t>(desc.GetBase()) +
+										                G_commandBuffer[3] +
+										                i2,
+										        NetSockets[i]
+										                .recvBuf[i2]);
+									}
+
+								} else {
+
+									for (int i2 = 0;
+									     i2 < size;
+									     i2++) {
+										mem_writeb(
+										        static_cast<uint32_t>(
+										                G_commandBuffer[2]
+										                << 4) +
+										                G_commandBuffer[3] +
+										                i2,
+										        NetSockets[i]
+										                .recvBuf[i2]);
+									}
 								}
 
 								// mark unused,

@@ -686,16 +686,28 @@ long NET_GetIP4Address(NET_Address* addr) {
 
     if (addr) {
         struct addrinfo* ai = addr->ainfo;
-	    if (ai) {
-		    while (ai->ai_addr) {
-			    if (ai->ai_family == AF_INET) {
+		while (ai && ai->ai_addr) {
+			if (ai->ai_family == AF_INET) {
 		    
-            		struct sockaddr_in* sa = (struct sockaddr_in*)(ai->ai_addr);
-					return (long)(sa->sin_addr.s_addr);
-			    }
-			    ai = ai->ai_next;
-            }
-	    }
+            	struct sockaddr_in* sa = (struct sockaddr_in*)(ai->ai_addr);
+				return (long)(sa->sin_addr.s_addr);
+			} else if (ai->ai_family == AF_INET6) {
+				// Prüfen auf IPv4-mapped IPv6-Adresse
+				struct sockaddr_in6* sa6 =
+				        (struct sockaddr_in6*)(ai->ai_addr);
+
+				// IPv4-mapped IPv6 hat Format ::ffff:a.b.c.d
+				// Die ersten 10 Bytes sind 0, dann 2 Bytes
+				// 0xff, dann 4 Bytes IPv4
+				if (IN6_IS_ADDR_V4MAPPED(&sa6->sin6_addr)) {
+					// Die IPv4-Adresse liegt in den letzten
+					// 4 Bytes
+					return (long)(*(
+					        uint32_t*)(&sa6->sin6_addr.s6_addr[12]));
+				}
+			}
+            ai = ai->ai_next;
+        }
     }
     return 0;
 }
