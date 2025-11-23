@@ -458,7 +458,7 @@ static SDL_Thread *SpinResolverThread(const int num)
     resolver_threads[num] = SDL_CreateThreadWithProperties(props);
     SDL_DestroyProperties(props);
 #else
-    resolver_threads[num] = SDL_CreateThread(ResolverThread, name, &num);
+    resolver_threads[num] = SDL_CreateThread(ResolverThread, name,  (void *) ((intptr_t)num));
 #endif
     if (!resolver_threads[num]) {
         SDL_AddAtomicInt(&resolver_num_threads, -1);
