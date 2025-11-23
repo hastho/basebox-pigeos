@@ -352,8 +352,13 @@ static NET_Status ResolveAddress(NET_Address *addr)
     struct addrinfo *ainfo = NULL;
     int rc;
 
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family   = AF_INET; // Nur IPv4 anfordern
+    hints.ai_socktype = SOCK_STREAM;
+
     //SDL_Log("getaddrinfo '%s'", addr->hostname);
-    rc = getaddrinfo(addr->hostname, NULL, NULL, &ainfo);
+    rc = getaddrinfo(addr->hostname, NULL, &hints, &ainfo);
     //SDL_Log("rc=%d", rc);
     if (rc != 0) {
         addr->errstr = CreateGetAddrInfoErrorString(rc);
