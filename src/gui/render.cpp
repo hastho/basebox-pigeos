@@ -1058,9 +1058,9 @@ static void init_render_settings(Section_prop& secprop)
 #endif
 	});
 
-	string_prop = secprop.Add_string("aspect", always, "auto");
+	string_prop = secprop.Add_string("aspect", always, "off");
 	string_prop->Set_help(
-	        "Set the aspect ratio correction mode ('auto' by default):\n"
+	        "Set the aspect ratio correction mode ('off' by default):\n"
 	        "  auto, on:            Apply aspect ratio correction for modern square-pixel\n"
 	        "                       flat-screen displays, so DOS video modes with non-square\n"
 	        "                       pixels appear as they would on a 4:3 display aspect\n"

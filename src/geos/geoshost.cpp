@@ -595,10 +595,10 @@ AsyncSocketConnect::Init(uint16_t* cmdRec) {
 	char hostname[20];
 	sprintf(hostname,
 	        "%d.%d.%d.%d",
-	        (cmdRec[1] >> 8) & 0xFF,
-	        cmdRec[1]  & 0xFF,
+	        cmdRec[2] & 0xFF,
 	        (cmdRec[2] >> 8) & 0xFF,
-	        cmdRec[2] & 0xFF);
+	        cmdRec[1] & 0xFF,
+	        (cmdRec[1] >> 8) & 0xFF);
 	LOG_MSG("\nAsyncSocketConnect::Init: %s\n", hostname);
 	m_Port = cmdRec[3] /* ((cmdRec[3] & 0xFF) << 8) |
 	         ((cmdRec[3] >> 8) & 0xFF)*/;
@@ -901,8 +901,8 @@ AsyncSocketResolveAddr::PollStatus() {
 			m_Result[0] = HIF_OK;
 			long addr_host   = NET_GetIP4Address(m_Addr);
 			LOG_MSG("NetResolveAddr success %x", addr_host);
-			m_Result[2] = (((addr_host >> 16) & 0xFF) << 8) | (((addr_host >> 16) & 0xFF00) >> 8);
-			m_Result[1] = ((addr_host & 0xFF) << 8) | ((addr_host & 0xFF00) >> 8);
+			m_Result[1] = ((addr_host >> 16) & 0xFF) | ((addr_host >> 16) & 0xFF00);
+			m_Result[2] = (addr_host & 0xFF) | (addr_host & 0xFF00);
 		} else {
 			m_Result[0] = HIF_FAILED;		
 		}
@@ -1911,6 +1911,8 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 
 void geoshost_init(Section* /*sec*/) {
 
+	NET_Init();
+
 	IO_RegisterReadHandler(0x38FF, read_baseboxid, io_width_t::word);
 	IO_RegisterWriteHandler(0x38FF, write_baseboxcmd, io_width_t::word);
 
@@ -1921,13 +1923,18 @@ void geoshost_init(Section* /*sec*/) {
 	LOG_INFO("GEOSHOST:Initialized");
 }
 
-void GeosHost_AddConfigSection(const ConfigPtr& conf)
-{
+void geoshost_exit(Section* /*sec*/) {
+
+	NET_Quit();
+}
+
+void GeosHost_AddConfigSection(const ConfigPtr& conf) {
 	assert(conf);
 
 	Section_prop* sec = conf->AddSection_prop("geoshost",
 	                                          &geoshost_init);
 	assert(sec);
+	sec->AddDestroyFunction(&geoshost_exit);
 }
 
 #endif // C_GEOSHOST
