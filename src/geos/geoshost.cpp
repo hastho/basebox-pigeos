@@ -1775,6 +1775,7 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				LOG_MSG("!!!SSLSetFD %x", handle);
 
 				int socket = G_commandBuffer[HIF_SLOT_DI];
+				LOG_MSG("!!!SSLSetFD socket %x", socket);
 				associatdSocket[handle - 1] = socket;
 
 				NetSockets[socket].ssl = true;
@@ -1782,6 +1783,7 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				G_responseBuffer[HIF_SLOT_AX] = HIF_FAILED;
 				G_responseBuffer[HIF_SLOT_DX] = 0;
 				G_responseOffset              = 6;
+				LOG_MSG("!!!SSLSetFD done");
 			} 
 			else if (G_commandBuffer[0] == HIF_SSL_SET_TLSEXT_HOST_NAME) {
 
