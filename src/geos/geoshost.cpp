@@ -227,7 +227,7 @@ public:
 #ifdef USE_SDL3
 		m_Addr = NULL;
 		m_State = IDLE;
-	#endif
+#endif
 	};
 	~AsyncSocketConnect() {};
 
@@ -607,121 +607,12 @@ AsyncSocketConnect::Init(uint16_t* cmdRec) {
 		return HIF_FAILED;
 	}
 	m_State = RESOLVING;
-	#endif
+#endif
 	return AsyncOp::Init(cmdRec);
-}
-
-static int ReceiveThread(void* sockPtr)
-{
-	LOG_MSG("\nReceive thread started...");
-
-	SocketState* sock = (SocketState*)sockPtr;
-	do {
-		// wait for data buffer to be supplied by dos request, or cancelled
-		if (((SocketState*)sock)->ssl) {
-			//((SocketState *)sock)->receiveDone = true;
-			((SocketState*)sock)->sslInitialEnd = true;
-
-			LOG_MSG("\nSSL initial receive done %x", sock);
-			return 0;
-		}
-
-		if ((sock->recvBufUsed <= 0) /* && !G_receiveCallActive*/) {
-
-			LOG_MSG("\nReceived get");
-			if (sock->recvBuf == NULL) {
-				LOG_MSG("\nReceived new buf");
-				sock->recvBuf = new char[8192];
-			}
-
-			int result = -1;
-			if (!sock->done) {
-				result = SDLNet_TCP_Recv(((SocketState*)sock)->socket,
-				                         sock->recvBuf,
-				                         8192);
-			}
-			LOG_MSG("\nReceived data %d", result);
-			if ((!sock->done) && (result > 0)) {
-
-				// pass data to DOS
-				sock->recvBufUsed = result;
-				LOG_MSG("\nSet sock->recvBufUsed %d", result);
-
-				//				SDL_mutexP(G_callbackMutex);
-//				G_callbackPending = true;
-//				SDL_mutexV(G_callbackMutex);
-				// PIC_ActivateIRQ(5);
-				GeosHost_NotifySocketChange();
-			
-				LOG_MSG("\nReceived data passed");
-			} else {
-
-				// handle receive error
-				LOG_MSG("\nReceived done");
-				// SDL_Delay(5000);
-				((SocketState*)sock)->receiveDone   = true;
-				((SocketState*)sock)->sslInitialEnd = true;
-				GeosHost_NotifySocketChange();
-				return 0;
-			}
-		} else {
-
-			// pending, wait some time and retry
-			SDL_Delay(50);
-		}
-
-	} while (true);
-}
-
-static void NetStartReceiver(int handle)
-{
-
-	// start receiver thread
-	SDL_Thread* thread;
-	int threadReturnValue;
-
-	LOG_MSG("\nSimple SDL_CreateThread test:");
-
-	SocketState& sock = NetSockets[handle];
-
-	// Simply create a thread
-	thread = SDL_CreateThread(ReceiveThread, "ReceiveThread", (void*)&sock);
-
-	if (NULL == thread) {
-		LOG_MSG("\nSDL_CreateThread failed: %s\n", SDL_GetError());
-	} else {
-		// SDL_WaitThread(thread, &threadReturnValue);
-		// printf("\nThread returned value: %d", threadReturnValue);
-		SDL_DetachThread(thread);
-	}
 }
 
 uint16_t 
 AsyncSocketConnect::RunAsync() {
-
-	LOG_INFO("Connect %x %x %u\n", m_ipAddr.host, m_ipAddr.host, m_socketHandle);
-
-
-	SocketState& sock = NetSockets[m_socketHandle];
-
-
-	if (!(sock.socket = SDLNet_TCP_Open(&m_ipAddr))) {
-		//__android_log_print(ANDROID_LOG_DEBUG, "GeosHost", "TCP Open
-		// failed %x\n", ip.host); if (!sock.blocking) {
-		//	SDLNet_FreeSocketSet(sock.socketSet);
-		//}
-		LOG_MSG("NetConnectRequest failed");
-		m_Result[0] = HIF_FAILED;
-
-	} else {
-
-		sock.open = true;
-		LOG_MSG("NetConnectRequest success");
-		m_Result[0] = HIF_OK;
-
-		// start receiver thread
-		NetStartReceiver(m_socketHandle);
-	}
 
 	return 0;
 }
@@ -966,68 +857,6 @@ static int AllocHandle(void* ptr)
 	return 0;
 }
 
-int SSLSocketRecv(int socket, void* buffer, size_t length, int flags)
-{
-	LOG_MSG("!!!SSLSocketRecv");
-	SocketState& sock = NetSockets[socket];
-
-	LOG_MSG("\n!!!SSLSocketRecv start wait %x", &sock);
-	while (!sock.sslInitialEnd) {
-	};
-	LOG_MSG("\n!!!SSLSocketRecv done wait");
-
-	if (sock.recvBufUsed) {
-		int recvSize = sock.recvBufUsed;
-		memcpy(buffer, sock.recvBuf, recvSize);
-		sock.recvBufUsed = 0;
-		return recvSize;
-	}
-
-	return SDLNet_TCP_Recv(sock.socket, buffer, length);
-}
-
-int SSLSocketSend(int socket, const void* buffer, size_t length, int flags)
-{
-	LOG_MSG("!!!SSLSocketSend");
-	SocketState& sock = NetSockets[socket];
-
-	sock.ssl = true;
-
-	return SDLNet_TCP_Send(sock.socket, buffer, length);
-}
-
-uint16_t 
-AsyncSSLConnect::Init(uint16_t* cmdRec) {
-
-	m_RunOwnThread = false;
-
-	int handle = G_commandBuffer[HIF_SLOT_SI];
-	LOG_MSG("!!!AsyncSSLConnect::Init %x", handle);
-
-	m_ctx = reinterpret_cast<struct TLSContext*>(
-	        handles[handle - 1]);
-	m_socketHandle = associatdSocket[handle - 1];
-
-	int res = tls_client_connect(m_ctx);
-	if (res < 0) {
-		return HIF_FAILED;
-	}
-
-	unsigned int out_buffer_len;
-	const unsigned char* out_buffer = tls_get_write_buffer(m_ctx, &out_buffer_len);
-
-	bool result = NET_WriteToStreamSocket(NetSockets[m_socketHandle].stream,
-	                                      out_buffer,
-	                                      out_buffer_len);
-	if (!result) {
-		return HIF_FAILED;
-	}
-
-	m_State = SENDING;
-
-	return AsyncOp::Init(cmdRec);
-}
-
 uint16_t 
 AsyncSSLConnect::RunAsync() {
 
@@ -1072,6 +901,37 @@ int validate_certificate(struct TLSContext* context,
 	return no_error;
 }
 
+
+uint16_t AsyncSSLConnect::Init(uint16_t* cmdRec)
+{
+
+	m_RunOwnThread = false;
+
+	int handle = G_commandBuffer[HIF_SLOT_SI];
+	LOG_MSG("!!!AsyncSSLConnect::Init %x", handle);
+
+	m_ctx = reinterpret_cast<struct TLSContext*>(handles[handle - 1]);
+	m_socketHandle = associatdSocket[handle - 1];
+
+	int res = tls_client_connect(m_ctx);
+	if (res < 0) {
+		return HIF_FAILED;
+	}
+
+	unsigned int out_buffer_len;
+	const unsigned char* out_buffer = tls_get_write_buffer(m_ctx, &out_buffer_len);
+
+	bool result = NET_WriteToStreamSocket(NetSockets[m_socketHandle].stream,
+	                                      out_buffer,
+	                                      out_buffer_len);
+	if (!result) {
+		return HIF_FAILED;
+	}
+
+	m_State = SENDING;
+
+	return AsyncOp::Init(cmdRec);
+}
 
 uint16_t 
 AsyncSSLConnect::PollStatus() {
@@ -1503,7 +1363,6 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 
 			} else if (G_commandBuffer[0] == HIF_NC_SEND_DATA) {
 
-#ifdef USE_SDL3
 				// allocate async op
 				AsyncOp* newOp = new AsyncSocketSend(G_opRecords);
 				if (newOp) {
@@ -1527,50 +1386,6 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				}
 				G_responseOffset = 6;
 
-	#else
-				int socketHandle = G_commandBuffer[1];
-				LOG_MSG("NetSendData: %d %x:%x %d",
-				        G_commandBuffer[4],
-				        G_commandBuffer[2],
-				        G_commandBuffer[3],
-				        socketHandle);
-
-				if (socketHandle < 0 || socketHandle >= MaxSockets) {
-					G_responseBuffer[0] = HIF_FAILED;
-				} else {
-					SocketState& sock = NetSockets[socketHandle];
-
-					uint32_t dosBuff = static_cast<uint32_t>(
-					                           G_commandBuffer[2]
-					                           << 4) +
-					                   G_commandBuffer[3];
-					int size = G_commandBuffer[4];
-					LOG_MSG("NetSendData data size: %d", size);
-
-					char* buffer = new char[size + 1];
-					for (int i = 0; i < size; i++) {
-						buffer[i] = mem_readb(dosBuff + i);
-					}
-					buffer[size] = 0;
-
-					int sent = SDLNet_TCP_Send(sock.socket,
-					                           buffer,
-					                           size);
-					if (sent < size) {
-
-						LOG_MSG("NetSendData send failed: %d %d",
-						        sent,
-						        socketHandle);
-						G_responseBuffer[0] = HIF_FAILED;
-					} else {
-
-						LOG_MSG("NetSendData send success");
-						G_responseBuffer[0] = HIF_OK;
-					}
-
-					delete[] buffer;
-				}
-#endif
 				G_responseOffset = 6;
 			} else if (G_commandBuffer[0] == HIF_NC_RECV_NEXT_CLOSE) {
 
