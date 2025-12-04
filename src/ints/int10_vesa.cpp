@@ -419,6 +419,9 @@ uint8_t VESA_SetBaseboxMode(uint16_t width, uint16_t height)
 		height = MAX_SCREEN_HEIGHT;
 	}
 
+	// force width to mulitple of 8
+	width = width & 0xFFF8;
+
 	// setup mode first
 	// Find the requested mode in our table of VGA modes
 	assert(ModeList_VGA.size());
