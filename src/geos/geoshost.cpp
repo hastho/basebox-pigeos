@@ -17,6 +17,7 @@
 #include <SDL3_net/SDL_net.h>
 
 #include "tlse.h"
+#include "tls_root_ca.h"
 
 #if C_GEOSHOST
 
@@ -65,7 +66,8 @@
 #define HIF_NC_RECV_NEXT_CLOSE  HIF_NETWORKING_BASE + 6
 #define HIF_NC_CLOSE            HIF_NETWORKING_BASE + 7
 #define HIF_NC_DISCONNECT       HIF_NETWORKING_BASE + 8
-#define HIF_NETWORKING_END      1199
+#define HIF_NC_CONNECTED        HIF_NETWORKING_BASE + 9
+#define HIF_NETWORKING_END     1199
 
 #define HIF_SSL_BASE				 1200
 #define HIF_SSL_V2_GET_CLIENT_METHOD HIF_SSL_BASE
@@ -100,6 +102,8 @@ SDL_mutex* G_eventQueueMutex = NULL;
 bool G_recheckEventInterrupt = false;
 bool G_protectedOpMode = false;
 static uint16_t G_nextAsyncID = 1;
+
+static int G_lookupNext = 1;
 
 class EventRecord {
 private:
@@ -349,6 +353,7 @@ struct SocketState {
 	char* recvBuf;
 	volatile int recvBufUsed;
 	volatile bool receiveDone;
+	volatile bool sendDone;
 	volatile bool done;
 	volatile bool ssl;
 	volatile bool sslInitialEnd;
@@ -358,7 +363,8 @@ struct SocketState {
 	          recvBuf(NULL),
 	          recvBufUsed(0),
 	          receiveDone(false),
-	          done(false),
+	          sendDone(false),
+			  done(false),
 	          ssl(false),
 	          sslInitialEnd(false)
 	{}
@@ -645,7 +651,7 @@ uint16_t AsyncSocketConnect::PollStatus() {
 			if (status != NET_WAITING) {
 				if (status == NET_SUCCESS) {
 					m_State = CONNECTED;
-					NetSockets[m_socketHandle].open = true;
+					//NetSockets[m_socketHandle].open = true;
 					LOG_MSG("NetConnectRequest success");
 					m_Result[0] = HIF_OK;
 					m_State     = DONE;
@@ -892,6 +898,11 @@ int validate_certificate(struct TLSContext* context,
 			return err;
 		}
 	}
+
+    //err = tls_certificate_chain_is_valid_root(context, certificate_chain, len);
+	//if (err) {
+	//	return err;
+	//}
 
 	fprintf(stderr, "Certificate OK\n");
 
@@ -1209,7 +1220,7 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 						resultVersion = 1;
 						break;
 				    case HIF_API_SOCKET:
-					    resultVersion = 1;
+					    resultVersion = 2;
 					    break;
 				    case HIF_API_SSL:
 						resultVersion = 1;
@@ -1307,10 +1318,23 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				//"GeosHost",
 				//"NetAllocConnection");
 
-				for (int i = 1; i < MaxSockets; i++) {
+				int i = G_lookupNext;
+				do {
 					if (!NetSockets[i].used) {
 						socketHandle = i;
 						break;
+					}
+					i++;
+					if (i == MaxSockets) {
+						i = 1;
+					}
+				} while (i != G_lookupNext);
+
+				if (socketHandle != -1) {
+
+					G_lookupNext = i + 1;
+					if (G_lookupNext >= MaxSockets) {
+						G_lookupNext = 1;
 					}
 				}
 
@@ -1330,6 +1354,7 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				sock.ssl           = false;
 				sock.sslInitialEnd = false;
 				sock.receiveDone   = false;
+				sock.sendDone      = false;
 
 				G_responseBuffer[0] = HIF_OK;
 				G_responseBuffer[1] = (uint16_t)socketHandle;
@@ -1399,11 +1424,21 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 
 								NetSockets[i].done = true;
 								G_responseBuffer[1] = i;
+								G_responseBuffer[2] =
+								        !NetSockets[i].sendDone
+								                ? 0
+								                : 0xFFFF;
 								if (i > 0) {
-									LOG_MSG("NetRecvNextClosed: %d",
-									        i);
+									LOG_MSG("NetRecvNextClosed: %d %d",
+									        i,
+									        G_responseBuffer[2]);
 								}
 								G_responseOffset = 6;
+
+								if (NetSockets[i].sendDone ) {
+									NetSockets[i].used = false;
+								}
+
 								return;
 							}
 						}
@@ -1522,17 +1557,38 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				}
 			} else if (G_commandBuffer[0] == HIF_NC_DISCONNECT) {
 				// actually close
-				LOG_MSG("NetDisconnect: %d", G_commandBuffer[1]);
+				LOG_MSG("NetDisconnect: %d %d",
+				        G_commandBuffer[1],
+				        G_commandBuffer[2]);
 				SocketState& sock = NetSockets[G_commandBuffer[1]];
 
 				if (sock.used) {
-					sock.done = true;
+					//sock.done = true;
+					sock.sendDone = true;
 					if (sock.stream) {
 						NET_DestroyStreamSocket(
 						        sock.stream);						
 						sock.stream  = NULL;
+						sock.receiveDone = true;
+						sock.done        = false;
 					}
-					sock.used = false;
+
+					if (G_commandBuffer[2]) {
+						// full close
+						sock.used = false;
+						sock.done = true;
+					}
+				}
+				G_responseBuffer[0] = HIF_OK;
+				G_responseOffset    = 6;
+
+			} else if (G_commandBuffer[0] == HIF_NC_CONNECTED) {
+				// actually close
+				LOG_MSG("NetConnected: %d", G_commandBuffer[1]);
+				SocketState& sock = NetSockets[G_commandBuffer[1]];
+
+				if (sock.used) {
+					sock.open = true;
 				}
 				G_responseBuffer[0] = HIF_OK;
 				G_responseOffset    = 6;
@@ -1569,14 +1625,19 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				LOG_MSG("!!!SSLNew context %d, %x", handle, context);
 
 				int method    = 0; // client method
-				int newHandle = AllocHandle(
-				        tls_create_context(method, TLS_V12));
+				struct TLSContext *context2 = tls_create_context(method,
+				                                        TLS_V12); 
+				//tls_load_root_certificates(context2,
+				//                          (const unsigned char*) ROOT_CA_DEF,
+				//                          ROOT_CA_DEF_LEN);
+				//SSL_CTX_root_ca(context2, "D:\\cacert.pem");
+
+				int newHandle = AllocHandle(context2);
 
 				LOG_MSG("!!!SSLNew result %d", newHandle);
 				G_responseBuffer[HIF_SLOT_AX] = HIF_OK;
 				G_responseBuffer[HIF_SLOT_DX] = newHandle & 0xFFFF;
 				G_responseOffset              = 6;
-
 			} 
 			else if (G_commandBuffer[0] == HIF_SSL_SET_SSL_METHOD) {
 				

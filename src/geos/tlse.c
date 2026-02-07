@@ -9273,10 +9273,10 @@ int tls_certificate_verify_signature(struct TLSCertificate *cert, struct TLSCert
         int ecc_stat = 0;
         unsigned char *signature = cert->sign_key;
         int signature_len = cert->sign_len;
-        if (!signature[0]) {
-            signature++;
-            signature_len--;
-        }
+        //if (!signature[0]) {
+        //    signature++;
+        //    signature_len--;
+        //}
         err = ecc_verify_hash(signature, signature_len, cert->fingerprint, hash_len, &ecc_stat, &key);
         ecc_free(&key);
         if (err) {
@@ -9298,10 +9298,10 @@ int tls_certificate_verify_signature(struct TLSCertificate *cert, struct TLSCert
     int rsa_stat = 0;
     unsigned char *signature = cert->sign_key;
     int signature_len = cert->sign_len;
-    if (!signature[0]) {
-        signature++;
-        signature_len--;
-    }
+    //if (!signature[0]) {
+    //    signature++;
+    //    signature_len--;
+    //}
     err = rsa_verify_hash_ex(signature, signature_len, cert->fingerprint, hash_len, LTC_PKCS_1_V1_5, hash_index, hash_len, &rsa_stat, &key);
     rsa_free(&key);
     if (err) {
