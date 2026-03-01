@@ -429,7 +429,10 @@ static void GeosHost_TickHandler(void) {
 		G_opRecords = G_opRecords->Cleanup();
 	}
 #ifdef USE_SDL3
-	PollSockets();
+	if (G_protectedOpMode == cpu.pmode)
+	{
+		PollSockets();
+	}
 #endif
 
 	// if in the matching operation mode: real mode or protected mode
@@ -1040,14 +1043,34 @@ AsyncSSLWrite::Init(uint16_t* cmdRec) {
 	m_ctx = reinterpret_cast<struct TLSContext*>(handles[handle - 1]);
 	m_socketHandle = associatdSocket[handle - 1];
 
-	uint32_t dosBuff = static_cast<uint32_t>(G_commandBuffer[4] << 4) +
-	                   G_commandBuffer[3];
+	//uint32_t dosBuff = static_cast<uint32_t>(G_commandBuffer[4] << 4) +
+	//                   G_commandBuffer[3];
 	int size = cmdRec[5];
 	LOG_MSG("NetSendData data size: %d", size);
 
 	char* buffer = new char[size + 1];
-	for (int i = 0; i < size; i++) {
-		buffer[i] = mem_readb(dosBuff + i);
+	//for (int i = 0; i < size; i++) {
+	//	buffer[i] = mem_readb(dosBuff + i);
+	//}
+	//buffer[size] = 0;
+
+	if (G_protectedOpMode) {
+		Descriptor desc;
+		cpu.gdt.GetDescriptor(G_commandBuffer[4], desc);
+
+		uint32_t dosBuff = static_cast<uint32_t>(desc.GetBase()) +
+		                   G_commandBuffer[3];
+		for (int i = 0; i < size; i++) {
+			buffer[i] = mem_readb(dosBuff + i);
+		}
+
+	} else {
+
+		uint32_t dosBuff = static_cast<uint32_t>(G_commandBuffer[4] << 4) +
+		                   G_commandBuffer[3];
+		for (int i = 0; i < size; i++) {
+			buffer[i] = mem_readb(dosBuff + i);
+		}
 	}
 	buffer[size] = 0;
 
@@ -1104,22 +1127,91 @@ uint16_t AsyncSSLRead::Init(uint16_t* cmdRec)
 	m_RunOwnThread = false;
 
 	int handle = G_commandBuffer[HIF_SLOT_SI];
-	LOG_MSG("!!!AsyncSSLConnect::Init %x", handle);
+	//LOG_MSG("!!!AsyncSSLRead::Init %x", handle);
 
 	m_ctx = reinterpret_cast<struct TLSContext*>(handles[handle - 1]);
 	m_socketHandle = associatdSocket[handle - 1];
+	//LOG_MSG("!!!AsyncSSLRead::Init socketHandle %x", m_socketHandle);
 
 	m_BufferSegment  = G_commandBuffer[4];
 	m_BufferOffset   = G_commandBuffer[3];
 	m_BufferSize     = cmdRec[5];
+	//LOG_MSG("!!!AsyncSSLRead::Init bufferSize %d", m_BufferSize);
 
 	return AsyncOp::Init(cmdRec);
 }
 
 uint16_t AsyncSSLRead::RunAsync() {}
 
+
+bool IsSegmentAccessible(uint16_t selector, bool isWrite = false)
+{
+	// Null selector
+	if ((selector & 0xFFFC) == 0) {
+		return false;
+	}
+
+	// Real Mode oder VM86: keine Deskriptor-Prüfung nötig
+	if (!cpu.pmode || (reg_flags & FLAG_VM)) {
+		return true;
+	}
+
+	// LDT-Selektor: prüfen ob LDT überhaupt geladen ist
+	if (selector & 4) {
+		if ((cpu.gdt.SLDT() & 0xFFFC) == 0) {
+			return false;
+		}
+	}
+
+	Descriptor desc;
+	if (!cpu.gdt.GetDescriptor(selector, desc)) {
+		return false;
+	}
+
+	// Present-Bit prüfen
+	if (!desc.saved.seg.p) {
+		return false;
+	}
+
+	// DPL vs CPL/RPL
+	uint8_t rpl = selector & 3;
+	uint8_t eff = (cpu.cpl > rpl) ? cpu.cpl : rpl;
+	if (desc.DPL() < eff) {
+		return false;
+	}
+
+	// Typ-Prüfung
+	uint8_t type = desc.Type();
+	if (isWrite) {
+		// Muss beschreibbares Datensegment sein
+		if ((type & 0x8) || !(type & 0x2)) {
+			return false;
+		}
+	} else {
+		// Muss Code- oder Datensegment sein (kein System-Deskriptor)
+		if (!(type & 0x10)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 uint16_t AsyncSSLRead::PollStatus()
 {
+	if (G_protectedOpMode) {
+		if (!cpu.pmode) {
+		
+			return 0;
+		}
+		if (!IsSegmentAccessible(m_BufferSegment, true)) {
+			return 0;
+		}
+	} 
+	else if (cpu.pmode) {
+		return 0;
+	}
+
 	int read_size = tls_read(m_ctx,
 	                         m_Buffer,
 	                         m_BufferSize > sizeof(m_Buffer) ? sizeof(m_Buffer)
@@ -1129,12 +1221,27 @@ uint16_t AsyncSSLRead::PollStatus()
 		// done some
 		m_Result[0]           = HIF_OK;
 		m_Result[HIF_SLOT_DX] = read_size;
-	
-		for (int i2 = 0; i2 < read_size; i2++) {
-			mem_writeb(static_cast<uint32_t>(m_BufferSegment << 4) +
-			                   m_BufferOffset + i2,
-						m_Buffer[i2]);
-		};
+
+		if (G_protectedOpMode) {
+
+			Descriptor desc;
+			cpu.gdt.GetDescriptor(m_BufferSegment, desc);
+
+			for (int i2 = 0; i2 < read_size; i2++) {
+				mem_writeb(static_cast<uint32_t>(desc.GetBase()) +
+				                   m_BufferOffset + i2,
+				           m_Buffer[i2]);
+			}
+
+		} else {
+
+			for (int i2 = 0; i2 < read_size; i2++) {
+				mem_writeb(static_cast<uint32_t>(
+							m_BufferSegment << 4) +
+				                   m_BufferOffset + i2,
+				           m_Buffer[i2]);
+			}
+		}
 
 
 	} else {
@@ -1674,10 +1781,21 @@ static void write_baseboxcmd(io_port_t, io_val_t command, io_width_t)
 				                handles[handle - 1]);
 
 				// TODO check buffer size
-				PhysPt dosBuff = (G_commandBuffer[HIF_SLOT_DX] << 4) +
-				                 G_commandBuffer[HIF_SLOT_CX];
-				MEM_StrCopy(dosBuff, host, reg_di); // 1024 toasts
-				                                    // the stack
+				if (G_protectedOpMode) {
+					Descriptor desc;
+					cpu.gdt.GetDescriptor(G_commandBuffer[HIF_SLOT_DX],
+					                      desc);
+					PhysPt dosBuff = desc.GetBase() +
+					                 G_commandBuffer[HIF_SLOT_CX];
+					MEM_StrCopy(dosBuff, host, reg_di); // 1024 toasts
+					                                    // the stack
+				} else {
+					PhysPt dosBuff = (G_commandBuffer[HIF_SLOT_DX]
+					                  << 4) +
+					                 G_commandBuffer[HIF_SLOT_CX];
+					MEM_StrCopy(dosBuff, host, reg_di); // 1024 toasts
+					                                    // the stack
+				}
 				host[G_commandBuffer[HIF_SLOT_DI]] = 0;
 
 				int result = tls_sni_set(ctx, host);
