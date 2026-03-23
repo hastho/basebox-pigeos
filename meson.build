@@ -1227,6 +1227,18 @@ incdir = [
 # by each of the src/ subdir imports below.
 internal_deps = []
 
+# xcb dependency for static X11 linking
+xcb_dep = dependency('xcb', required: false, static: true)
+if xcb_dep.found()
+    internal_deps += xcb_dep
+endif
+
+# Xrender dependency for static Xcursor linking
+xrender_dep = dependency('xrender', required: false, static: true)
+if xrender_dep.found()
+    internal_deps += xrender_dep
+endif
+
 # bundled dependencies, in dependency-order
 #
 subdir('src/libs/ghc')
