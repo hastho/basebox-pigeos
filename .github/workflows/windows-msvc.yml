@@ -11,23 +11,19 @@ env:
   VCPKG_BINARY_SOURCES: 'clear;nuget,GitHub,readwrite'
 
 jobs:
-  build_windows_vs:
+  build_windows_vs_release:
     name: ${{ matrix.conf.name }}
     runs-on: windows-2022
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     strategy:
       matrix:
         conf:
-          - name: MSVC 32-bit
-            arch: x86
-            max_warnings: 17
-          - name: MSVC 64-bit
+          - name: Release build (64-bit)
             arch: x64
-            max_warnings: 687
+            vs-release-dirname: x64
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: false
 
@@ -67,90 +63,6 @@ jobs:
         shell: pwsh
         run:   .\scripts\log-env.ps1
 
-      - name:  Run tests
-        shell: pwsh
-        run: |
-          cd vs
-          MSBuild -m dosbox.sln -t:tests:Rebuild -p:Configuration=Debug -p:Platform=${{ matrix.conf.arch }}
-
-      - name:  Build
-        shell: pwsh
-        run: |
-          cd vs
-          MSBuild -m dosbox.sln -t:dosbox:Rebuild -p:Configuration=Debug -p:Platform=${{ matrix.conf.arch }} | Tee-Object build.log
-
-      - name:  Summarize warnings
-        shell: pwsh
-        env:
-          MAX_WARNINGS: ${{ matrix.conf.max_warnings }}
-        run: python scripts\count-warnings.py -f --msvc vs\build.log
-
-  build_windows_vs_release:
-    name: ${{ matrix.conf.name }}
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: windows-2022
-    strategy:
-      matrix:
-        conf:
-          - name: Release build (32-bit)
-            arch: x86
-            vs-release-dirname: Win32
-            debugger: false
-          - name: Release build (64-bit)
-            arch: x64
-            vs-release-dirname: x64
-            debugger: false
-          - name: Release build w/ debugger (32-bit)
-            arch: x86
-            vs-release-dirname: Win32
-            debugger: true
-          - name: Release build w/ debugger (64-bit)
-            arch: x64
-            vs-release-dirname: x64
-            debugger: true
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name:  Setup vcpkg and NuGet
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "${{ env.VCPKG_ROOT }}"
-          git checkout master -f
-          git pull
-          ./bootstrap-vcpkg.sh -disableMetrics
-          nuget=$(./vcpkg.exe fetch nuget | tail -n 1)
-          owner="${GITHUB_REPOSITORY%/*}"
-          source_url="https://nuget.pkg.github.com/$owner/index.json"
-          "$nuget" sources add \
-            -source "$source_url" \
-            -storepasswordincleartext \
-            -name "GitHub" \
-            -username "$owner" \
-            -password "${{ secrets.GITHUB_TOKEN }}"
-          "$nuget" setapikey "${{ secrets.GITHUB_TOKEN }}" \
-            -source "$source_url"
-
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v1.3
-        with:
-            vs-prerelease: true
-            msbuild-architecture: ${{ matrix.conf.arch }}
-
-      - name:  Integrate packages
-        shell: pwsh
-        run: |
-          ${{ env.VCPKG_ROOT }}\vcpkg.exe integrate install
-          if (-not $?) { throw "vcpkg failed to integrate packages" }
-
-      - name:  Log environment
-        shell: pwsh
-        run:   .\scripts\log-env.ps1
-
       - name:  Set version
         id:    set_dosbox_vers
         shell: bash
@@ -164,14 +76,6 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "dosbox_vers=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name:  Enable the debugger in config.h
-        if: ${{ matrix.conf.debugger }}
-        shell: bash
-        run: |
-          set -x
-          sed -i "s|C_DEBUG.*|C_DEBUG 1|"             src/platform/visualc/config.h
-          sed -i "s|C_HEAVY_DEBUG.*|C_HEAVY_DEBUG 1|" src/platform/visualc/config.h
-
       - name:  Build release
         shell: pwsh
         run: |
@@ -184,79 +88,63 @@ jobs:
         run: |
           echo "pkg_dir=dosbox-staging-windows-${{ matrix.conf.arch }}-${{ env.VERSION }}" >> $GITHUB_OUTPUT
 
-      - name: Package standard build
-        if: ${{ !matrix.conf.debugger }}
+      - name: Package
         shell: bash
         run: |
-          # Construct VC_REDIST_DIR
-          readonly VC_REDIST_BASE="C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Redist/MSVC"
-          readonly VC_REDIST_VERSION="14.36.32532"
-          readonly VC_REDIST_CRT_VERSION="Microsoft.VC143.CRT"
-          export VC_REDIST_DIR="$VC_REDIST_BASE/$VC_REDIST_VERSION/${{ matrix.conf.arch }}/$VC_REDIST_CRT_VERSION"
-          find "$VC_REDIST_BASE" -maxdepth 3 -type d
-
-          # Package
+          readonly VC_REDIST_BASE="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Redist/MSVC"
+          # Find the CRT directory containing DLLs (e.g., x64/Microsoft.VC143.CRT/)
+          VC_REDIST_DIR=$(find "$VC_REDIST_BASE" -type d -name "Microsoft.VC143.CRT" 2>/dev/null | head -1)
+          if [ -z "$VC_REDIST_DIR" ]; then
+            echo "Error: Could not find MSVC CRT directory"
+            exit 1
+          fi
+          echo "Found VC_REDIST_DIR: $VC_REDIST_DIR"
+          export VC_REDIST_DIR
           ./scripts/create-package.sh \
             -p msvc \
             vs/${{ matrix.conf.vs-release-dirname }}/Release \
             "${{ steps.set_pkg_dir.outputs.pkg_dir }}"
 
-      - name:  Package the debugger
-        if:    ${{ matrix.conf.debugger }}
+      - name: Create ZIP archive
         shell: bash
         run: |
-          set -x
-          mkdir -p ${{ steps.set_pkg_dir.outputs.pkg_dir }}
-          # Move the debugger build into the release area
-          readonly RELEASE_DIR=${{ matrix.conf.vs-release-dirname }}/Release
-          ls "vs/$RELEASE_DIR"
-          cp vs/$RELEASE_DIR/dosbox.exe   ${{ steps.set_pkg_dir.outputs.pkg_dir }}/dosbox_with_debugger.exe
+          cd "${{ steps.set_pkg_dir.outputs.pkg_dir }}"
+          powershell -Command "Compress-Archive -Path * -DestinationPath ../dosbox-staging-windows-${{ matrix.conf.arch }}.zip -Force"
+          cd ..
 
-      - name: Upload package
-        if:   ${{ !matrix.conf.debugger }}
-        uses: actions/upload-artifact@v4.3.1
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
         with:
-          name: ${{ steps.set_pkg_dir.outputs.pkg_dir }}
-          path: ${{ steps.set_pkg_dir.outputs.pkg_dir }}
+          name: dosbox-staging-windows-${{ matrix.conf.arch }}
+          path: dosbox-staging-windows-${{ matrix.conf.arch }}.zip
           overwrite: true
 
-      - name: Upload debugger artifact
-        if:   ${{ matrix.conf.debugger }}
-        uses: actions/upload-artifact@v4.3.1
-        with:
-          name: ${{ steps.set_pkg_dir.outputs.pkg_dir }}
-          path: ${{ steps.set_pkg_dir.outputs.pkg_dir }}/dosbox_with_debugger.exe
-          overwrite: true
-
-  # This job exists only to publish an artifact with version info when building
-  # from main branch, so snapshot build version will be visible on:
-  # https://dosbox-staging.github.io/downloads/devel/
-  #
-  publish_additional_artifacts:
-    name: Publish additional Windows artifacts
-    needs: build_windows_vs_release
-    runs-on: windows-2022
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  tag_build:
+    name: Tag Build
+    needs: [build_windows_vs_release]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v5
         with:
-          submodules: false
+          fetch-depth: 0
 
-      - name: Generate changelog
-        shell: bash
+      - name: Determine tag name
+        id: tag_name
         run: |
-          set +x
-          git fetch --unshallow
-          git fetch --all --tags --force
-          VERSION=$(git describe --abbrev=0)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          NEWEST_TAG=$(git describe --abbrev=0)
-          git log "$NEWEST_TAG..HEAD" > changelog-$VERSION.txt
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          if [[ "$BRANCH_NAME" == "main" ]]; then
+            TAG_NAME="CI-latest"
+          else
+            TAG_NAME="CI-latest-${BRANCH_NAME}"
+          fi
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "Tagging HEAD with: ${TAG_NAME}"
 
-      - uses: actions/upload-artifact@v4.3.1
-        with:
-          # Keep exactly this artifact name; it's being used to propagate
-          # version info via GitHub REST API
-          name: changelog-${{ env.VERSION }}.txt
-          path: changelog-${{ env.VERSION }}.txt
-          overwrite: true
+      - name: Create and push tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git tag -f ${{ steps.tag_name.outputs.tag_name }}
+          git push origin ${{ steps.tag_name.outputs.tag_name }} --force

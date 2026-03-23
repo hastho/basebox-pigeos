@@ -1,0 +1,215 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  linux_release:
+    name: Linux x86_64 Release
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: false
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            $(cat packages/ubuntu-20.04-apt.txt)
+          sudo pip3 install --upgrade meson ninja
+
+      - name: Build and package
+        run: |
+          git fetch --prune --unshallow --tags --force
+          DOSBOX_VERS=$(git describe --tags | sed 's/^v//')
+          meson setup build \
+            -Duse_xinput2=false \
+            -Duse_zlib_ng=sse2,ssse3 \
+            -Ddefault_library=static \
+            --wrap-mode=forcefallback \
+            -Db_lto=true \
+            -Db_lto_threads=$(nproc) \
+            --native-file=.github/meson/native-gcc-9.ini \
+            build \
+            || ( cat build/meson-logs/meson-log.txt ; exit 1 )
+          ninja -C build
+          meson install -C build --destdir=build/basebox-pigeos-amd64
+          mkdir -p build/basebox-pigeos-amd64/DEBIAN
+          cat > build/basebox-pigeos-amd64/DEBIAN/control << CONTROL
+          Package: basebox-pigeos
+          Version: ${DOSBOX_VERS}-1
+          Section: games
+          Priority: optional
+          Architecture: amd64
+          Maintainer: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+          Description: DOSBox fork for PigeOS
+           DOSBox Staging fork optimized for basebox-pigeos with
+           LPT printer redirection support.
+          CONTROL
+          dpkg-deb --build build/basebox-pigeos-amd64 ./
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: basebox-pigeos-amd64-deb
+          path: basebox-pigeos-amd64.deb
+          retention-days: 1
+
+  linux_arm_release:
+    name: Linux ARM Release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [armhf, arm64]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and package
+        run: |
+          git fetch --prune --unshallow --tags --force
+          DOSBOX_VERS=$(git describe --tags | sed 's/^v//')
+          mkdir -p output
+          docker run --rm -v "$PWD/output:/output" -v "$PWD:$PWD" -w "$PWD" ghcr.io/hastho/debian-cross:11-${DOSBOX_VERS}-${{ matrix.arch }} bash -c 'set -x; mkdir -p /output; meson setup build --cross-file dosbox-cross --prefix=/usr -Duse_zlib_ng=false -Dunit_tests=disabled; ninja -C build; meson install -C build --destdir=build/basebox-pigeos-${{ matrix.arch }}; mkdir -p build/basebox-pigeos-${{ matrix.arch }}/DEBIAN; echo "Package: basebox-pigeos" > build/basebox-pigeos-${{ matrix.arch }}/DEBIAN/control; echo "Version: ${DOSBOX_VERS}-1" >> build/basebox-pigeos-${{ matrix.arch }}/DEBIAN/control; echo "Section: games" >> build/basebox-pigeos-${{ matrix.arch }}/DEBIAN/control; echo "Priority: optional" >> build/basebox-pigeos-${{ matrix.arch }}/DEBIAN/control; echo "Architecture: ${{ matrix.arch }}" >> build/basebox-pigeos-${{ matrix.arch }}/DEBIAN/control; echo "Maintainer: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>" >> build/basebox-pigeos-${{ matrix.arch }}/DEBIAN/control; echo "Description: DOSBox fork for PigeOS" >> build/basebox-pigeos-${{ matrix.arch }}/DEBIAN/control; echo " DOSBox Staging fork optimized for basebox-pigeos with LPT printer redirection support." >> build/basebox-pigeos-${{ matrix.arch }}/DEBIAN/control; dpkg-deb --build build/basebox-pigeos-${{ matrix.arch }} /output/; mv /output/basebox-pigeos_*_${{ matrix.arch }}.deb /output/basebox-pigeos-${{ matrix.arch }}.deb'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: basebox-pigeos-${{ matrix.arch }}-deb
+          path: output/basebox-pigeos-${{ matrix.arch }}.deb
+          retention-days: 1
+
+  windows_release:
+    name: Windows x64 Release
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: false
+
+      - name: Setup vcpkg and NuGet
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${{ env.VCPKG_ROOT }}"
+          git checkout master -f
+          git pull
+          ./bootstrap-vcpkg.sh -disableMetrics
+          nuget=$(./vcpkg.exe fetch nuget | tail -n 1)
+          owner="${GITHUB_REPOSITORY%/*}"
+          source_url="https://nuget.pkg.github.com/$owner/index.json"
+          "$nuget" sources add \
+            -source "$source_url" \
+            -storepasswordincleartext \
+            -name "GitHub" \
+            -username "$owner" \
+            -password "${{ secrets.GITHUB_TOKEN }}"
+          "$nuget" setapikey "${{ secrets.GITHUB_TOKEN }}" \
+            -source "$source_url"
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-prerelease: true
+          msbuild-architecture: x64
+
+      - name: Integrate packages
+        shell: pwsh
+        run: |
+          ${{ env.VCPKG_ROOT }}\vcpkg.exe integrate install
+
+      - name: Set version
+        id: version
+        shell: bash
+        run: |
+          git fetch --prune --unshallow --tags --force
+          VERSION=$(git describe --tags | sed 's/^v//')
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "pkg_dir=dosbox-staging-windows-x64-${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build release
+        shell: pwsh
+        run: |
+          cd vs
+          MSBuild -m dosbox.sln -t:dosbox:Rebuild -p:Configuration=Release -p:Platform=x64
+
+      - name: Package
+        shell: bash
+        run: |
+          readonly VC_REDIST_BASE="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Redist/MSVC"
+          VC_REDIST_DIR=$(find "$VC_REDIST_BASE" -type d -name "Microsoft.VC143.CRT" 2>/dev/null | head -1)
+          if [ -z "$VC_REDIST_DIR" ]; then
+            echo "Error: Could not find MSVC CRT directory"
+            exit 1
+          fi
+          echo "Found VC_REDIST_DIR: $VC_REDIST_DIR"
+          export VC_REDIST_DIR
+          ./scripts/create-package.sh \
+            -p msvc \
+            vs/x64/Release \
+            "${{ steps.version.outputs.pkg_dir }}"
+
+      - name: Create ZIP archive
+        shell: bash
+        run: |
+          cd "${{ steps.version.outputs.pkg_dir }}"
+          powershell -Command "Compress-Archive -Path * -DestinationPath ../dosbox-staging-windows-x64.zip -Force"
+          cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: dosbox-staging-windows-x64
+          path: dosbox-staging-windows-x64.zip
+          retention-days: 1
+
+  create_release:
+    name: Create Release
+    needs: [linux_release, linux_arm_release, windows_release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux amd64 artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: basebox-pigeos-amd64-deb
+          path: artifacts
+
+      - name: Download Linux armhf artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: basebox-pigeos-armhf-deb
+          path: artifacts
+
+      - name: Download Linux arm64 artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: basebox-pigeos-arm64-deb
+          path: artifacts
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: dosbox-staging-windows-x64
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.deb
+            artifacts/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
