@@ -92,6 +92,7 @@ jobs:
            LPT printer redirection support.
           CONTROL
           dpkg-deb --build build/basebox-pigeos-amd64 ./
+          mv basebox-pigeos_*.deb basebox-pigeos-amd64.deb || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
