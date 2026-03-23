@@ -90,6 +90,7 @@ unit_tests = [
     {'name': 'fraction', 'deps': []},
     {'name': 'int10_modes', 'deps': [dosbox_dep], 'extra_cpp': []},
     {'name': 'iohandler_containers', 'deps': [libmisc_stubs_dep, libshell_stubs_dep]},
+    {'name': 'lpt', 'deps': [dosbox_dep, sdl2_dep]},
     {'name': 'math_utils', 'deps': [libmisc_stubs_dep, libshell_stubs_dep]},
     {'name': 'mixer', 'deps': [dosbox_dep, libiir_dep], 'extra_cpp': []},
     {'name': 'rect', 'deps': []},

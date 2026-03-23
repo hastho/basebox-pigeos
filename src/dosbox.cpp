@@ -98,6 +98,8 @@ void LPT_DAC_Init(Section *);
 void PS1AUDIO_Init(Section *);
 void SERIAL_Init(Section*);
 
+void PRINTER_Init(Section*);
+
 #if C_IPX
 void IPX_Init(Section*);
 #endif
@@ -1132,6 +1134,33 @@ void DOSBOX_Init()
 	pstring = secprop->Add_path("phonebookfile", only_at_start, "phonebook.txt");
 	pstring->Set_help("File used to map fake phone numbers to addresses\n"
 	                  "('phonebook.txt' by default).");
+
+	secprop = control->AddSection_prop("printer", &PRINTER_Init, false);
+	pint = secprop->Add_int("print_timeout", only_at_start, 2000);
+	pint->SetMinMax(1, 1000000);
+	pint->Set_help(
+	        "Number of ticks before spooled output is printed.\n"
+	        "(A number between 1 and 1000000, 2000 by default).");
+
+	pstring = secprop->Add_path("tmpdir", only_at_start, "");
+	pstring->Set_help(
+	        "Path where to store temporary work files.\n"
+	        "If nothing is specified the current directory will be used.");
+
+	pstring = secprop->Add_string("LPT1", only_at_start, "disabled");
+	pstring->Set_help(
+	        "Set printer redirection for LPT1.\n"
+	        "Can be 'disabled' or platform-dependent command.\n"
+	        "'%%s' in command string will be replaced by temporary work file name.");
+
+	pstring = secprop->Add_string("LPT2", only_at_start, "disabled");
+	pstring->Set_help("See LPT1.");
+
+	pstring = secprop->Add_string("LPT3", only_at_start, "disabled");
+	pstring->Set_help("See LPT1.");
+
+	pstring = secprop->Add_string("LPT4", only_at_start, "disabled");
+	pstring->Set_help("See LPT1.");
 
 	// All the general DOS Related stuff, on real machines mostly located in
 	// CONFIG.SYS

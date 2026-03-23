@@ -49,6 +49,7 @@ libhardware_sources = files(
     'pcspeaker_discrete.cpp',
     'pcspeaker_impulse.cpp',
     'pic.cpp',
+    'printer.cpp',
     'ps1audio.cpp',
     'reelmagic/driver.cpp',
     'reelmagic/player.cpp',

@@ -30,6 +30,7 @@
 #include "support.h"
 #include "drives.h"
 #include "dev_con.h"
+#include "dev_lpt.h"
 
 DOS_Device * Devices[DOS_DEVICES];
 
@@ -310,23 +311,6 @@ public:
 	}
 };
 
-class device_LPT1 final : public device_NUL {
-public:
-	device_LPT1()
-	{
-		SetName("LPT1");
-	}
-	uint16_t GetInformation() override
-	{
-		return 0x80A0;
-	}
-	bool Read(uint8_t* /*data*/, uint16_t* /*size*/) override
-	{
-		DOS_SetError(DOSERR_ACCESS_DENIED);
-		return false;
-	}
-};
-
 bool DOS_Device::Read(uint8_t * data,uint16_t * size) {
 	return Devices[devnum]->Read(data,size);
 }
@@ -570,9 +554,6 @@ void DOS_SetupDevices() {
 	DOS_Device * newdev2;
 	newdev2=new device_NUL();
 	DOS_AddDevice(newdev2);
-	DOS_Device * newdev3;
-	newdev3=new device_LPT1();
-	DOS_AddDevice(newdev3);
 }
 
 void DOS_ShutDownDevices()

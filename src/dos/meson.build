@@ -5,6 +5,7 @@ libdos_sources = files(
     'dos.cpp',
     'dos_classes.cpp',
     'dos_devices.cpp',
+    'dev_lpt.cpp',
     'dos_execute.cpp',
     'dos_files.cpp',
     'dos_ioctl.cpp',
