@@ -92,13 +92,16 @@ jobs:
         shell: bash
         run: |
           readonly VC_REDIST_BASE="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Redist/MSVC"
-          # Find the CRT directory containing DLLs (e.g., x64/Microsoft.VC143.CRT/)
-          VC_REDIST_DIR=$(find "$VC_REDIST_BASE" -type d -name "Microsoft.VC143.CRT" 2>/dev/null | head -1)
+          echo "Searching for VC_REDIST in: $VC_REDIST_BASE"
+          ls -la "$VC_REDIST_BASE" 2>/dev/null || echo "Base path not found"
+          # Find any CRT directory
+          VC_REDIST_DIR=$(find "$VC_REDIST_BASE" -type d -name "Microsoft.VC*.CRT" 2>/dev/null | head -1)
           if [ -z "$VC_REDIST_DIR" ]; then
             echo "Error: Could not find MSVC CRT directory"
             exit 1
           fi
           echo "Found VC_REDIST_DIR: $VC_REDIST_DIR"
+          ls -la "$VC_REDIST_DIR" 2>/dev/null || echo "CRT dir contents not accessible"
           export VC_REDIST_DIR
           ./scripts/create-package.sh \
             -p msvc \
