@@ -19,6 +19,10 @@ on:
       - 'licenses/**'
       - 'website/**'
 
+  push:
+    tags:
+      - 'v*'
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -240,9 +244,8 @@ jobs:
 
 
   build_linux_release:
-    name: Release build
+    name: Linux Release
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     needs: cache_subprojects
     steps:
       - name: Checkout repository
@@ -272,11 +275,11 @@ jobs:
       - name: Log environment
         run:  ./scripts/log-env.sh
 
-      - name: Inject version string
+      - name: Extract tag version
         run: |
-          set -x
-          VERSION=$(./scripts/get-version.sh version-and-hash)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "VERSION=$TAG" >> $GITHUB_ENV
+          echo "PKG_DIR=dosbox-staging-linux-x86_64-$TAG" >> $GITHUB_ENV
 
       - name: Setup release build
         run: |
@@ -289,7 +292,6 @@ jobs:
             build \
           || ( cat build/meson-logs/meson-log.txt ; exit 1 )
 
-
       - name: Build
         run:  meson compile -C build
 
@@ -298,18 +300,15 @@ jobs:
           ./scripts/create-package.sh \
             -p linux \
             build \
-            "dosbox-staging-linux-x86_64-$VERSION"
+            "${{ env.PKG_DIR }}"
 
       - name: Create tarball
         run: |
-          tar -cJf "dosbox-staging-linux-x86_64-$VERSION.tar.xz" \
-            "dosbox-staging-linux-x86_64-$VERSION"
+          tar -cJf "${{ env.PKG_DIR }}.tar.xz" "${{ env.PKG_DIR }}"
 
-      - name: Upload tarball
-        uses: actions/upload-artifact@v4.3.1
-        # GitHub automatically zips the artifacts (there's no way to create
-        # a tarball), and it removes all executable flags while zipping.
-        # Letting it zip a tarball preserves flags in the compressed files.
+      - name: Create GitHub Release
+        uses: softprops/release-gh-release@v1
         with:
-          name: dosbox-staging-linux-x86_64-${{ env.VERSION }}
-          path: dosbox-staging-linux-x86_64-${{ env.VERSION }}.tar.xz
+          files: |
+            ${{ env.PKG_DIR }}.tar.xz
+          prerelease: ${{ contains(github.ref, '-') }}

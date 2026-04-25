@@ -19,6 +19,10 @@ on:
       - 'licenses/**'
       - 'website/**'
 
+  push:
+    tags:
+      - 'v*'
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -107,7 +111,6 @@ jobs:
   build_macos_release:
     name: Release build (${{ matrix.runner.arch }})
     runs-on: ${{ matrix.runner.host }}
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     env:
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.runner.minimum_deployment }}
 
@@ -120,7 +123,6 @@ jobs:
             brew_path: /usr/local/homebrew
             minimum_deployment: '10.15'
             needs_deps: true
-            needs_libintl_workaround: false
 
           - host: macos-14
             arch: arm64
@@ -158,11 +160,10 @@ jobs:
       - name: Log environment
         run:  arch -arch=${{ matrix.runner.arch }} ./scripts/log-env.sh
 
-      - name: Inject version string
+      - name: Extract tag version
         run: |
-          set -x
-          VERSION=$(./scripts/get-version.sh version-and-hash)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "VERSION=$TAG" >> $GITHUB_ENV
 
       - name: Setup and build release
         run: |
@@ -186,12 +187,12 @@ jobs:
       - name: Upload resources
         uses: actions/upload-artifact@v4
         with:
-          name: Resources
+          name: Resources-${{ matrix.runner.arch }}
           path: Resources
           overwrite: true
 
-  publish_universal_build:
-    name: Publish universal build
+  publish_macos_release:
+    name: Publish macOS Release
     needs: build_macos_release
     runs-on: macos-14
     steps:
@@ -200,21 +201,30 @@ jobs:
         with:
           submodules: false
 
-      - name: Inject version string
+      - name: Extract tag version
         run: |
-          set -x
-          VERSION=$(./scripts/get-version.sh version-and-hash)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "VERSION=$TAG" >> $GITHUB_ENV
+          echo "PKG_DIR=dosbox-staging-macOS-universal-$TAG" >> $GITHUB_ENV
 
-      - name: Install brew depedencies
+      - name: Install brew dependencies
         run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --overwrite librsvg
 
       - name: Download binaries
         uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Download resources
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Resources-*
+          path: resources
+          merge-multiple: true
 
       - name: Package
         run: |
-          mv Resources ../
+          mv resources/Resources ./
           ./scripts/create-package.sh \
             -p macos \
             -v "${{ env.VERSION }}" \
@@ -231,12 +241,11 @@ jobs:
           hdiutil create \
               -volname "DOSBox Staging" \
               -srcfolder dist \
-              -ov -format UDZO "dosbox-staging-macOS-universal-${{ env.VERSION }}.dmg"
+              -ov -format UDZO "${{ env.PKG_DIR }}.dmg"
 
-      - name: Upload disk image
-        uses: actions/upload-artifact@v4
-        # GitHub automatically zips the artifacts, and there's no option
-        # to skip it or upload a file only.
+      - name: Create GitHub Release
+        uses: softprops/release-gh-release@v1
         with:
-          name: dosbox-staging-macOS-universal-${{ env.VERSION }}
-          path: dosbox-staging-macOS-universal-${{ env.VERSION }}.dmg
+          files: |
+            ${{ env.PKG_DIR }}.dmg
+          prerelease: ${{ contains(github.ref, '-') }}
