@@ -36,7 +36,7 @@ VERSION=$(
 
 GIT_HASH=$(git rev-parse --short=5 HEAD)
 
-FORK_SUFFIX="pigeos"
+FORK_SUFFIX="basebox"
 
 case $1 in
     version)          echo "$VERSION-$FORK_SUFFIX" ;;

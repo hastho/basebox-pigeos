@@ -277,7 +277,7 @@ jobs:
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           echo "VERSION=$TAG" >> $GITHUB_ENV
-          echo "PKG_DIR=basebox-pigeos-linux-x86_64-$TAG" >> $GITHUB_ENV
+          echo "PKG_DIR=basebox-linux-x86_64-$TAG" >> $GITHUB_ENV
 
       - name: Setup release build
         run: |

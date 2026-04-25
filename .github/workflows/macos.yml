@@ -203,7 +203,7 @@ jobs:
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           echo "VERSION=$TAG" >> $GITHUB_ENV
-          echo "PKG_DIR=basebox-pigeos-macOS-universal-$TAG" >> $GITHUB_ENV
+          echo "PKG_DIR=basebox-macOS-universal-$TAG" >> $GITHUB_ENV
 
       - name: Install brew dependencies
         run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --overwrite librsvg

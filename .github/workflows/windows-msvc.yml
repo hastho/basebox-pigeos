@@ -167,7 +167,7 @@ jobs:
           set -x
           TAG=${GITHUB_REF#refs/tags/}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "pkg_dir=basebox-pigeos-windows-${{ matrix.arch }}-${TAG}" >> $GITHUB_OUTPUT
+          echo "pkg_dir=basebox-windows-${{ matrix.arch }}-${TAG}" >> $GITHUB_OUTPUT
 
       - name:  Set the Git hash in config.h
         shell: bash
@@ -258,8 +258,8 @@ jobs:
       - name: Merge artifacts (${{ matrix.arch }})
         uses: actions/upload-artifact/merge@v4
         with:
-          name:    basebox-pigeos-windows-${{ matrix.arch }}-${{ needs.build_windows_vs_release.outputs.tag }}
-          pattern: basebox-pigeos-windows-${{ matrix.arch }}-${{ needs.build_windows_vs_release.outputs.tag }}-*
+          name:    basebox-windows-${{ matrix.arch }}-${{ needs.build_windows_vs_release.outputs.tag }}
+          pattern: basebox-windows-${{ matrix.arch }}-${{ needs.build_windows_vs_release.outputs.tag }}-*
           delete-merged: 'true'
 
   build_windows_installer:
@@ -284,7 +284,7 @@ jobs:
           set -x
           TAG=${GITHUB_REF#refs/tags/}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "pkg_dir=basebox-pigeos-windows-x64-${TAG}" >> $GITHUB_OUTPUT
+          echo "pkg_dir=basebox-windows-x64-${TAG}" >> $GITHUB_OUTPUT
 
       - name: Prepare Windows installer
         shell: bash
@@ -303,7 +303,7 @@ jobs:
           cp contrib/icons/windows/dosbox-staging.bmp      out
           cp contrib/icons/windows/dosbox-staging-side.bmp out
 
-          mv artifacts/basebox-pigeos-windows-x64-${TAG}/* out/program
+          mv artifacts/basebox-windows-x64-${TAG}/* out/program
           mv out/program/dosbox*.exe                       out
 
       - name: Build Windows installer
@@ -318,5 +318,5 @@ jobs:
         with:
           files: |
             out/${{ steps.set_vars.outputs.pkg_dir }}-setup.exe
-            artifacts/basebox-pigeos-windows-x64-${{ needs.merge_windows_artifacts.outputs.tag }}-without-debugger/*.zip
+            artifacts/basebox-windows-x64-${{ needs.merge_windows_artifacts.outputs.tag }}-without-debugger/*.zip
           prerelease: ${{ contains(github.ref, '-') }}
