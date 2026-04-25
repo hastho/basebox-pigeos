@@ -24,6 +24,7 @@
 #include "dos_system.h"
 #include "timer.h"
 
+#include <atomic>
 #include <queue>
 #include <string>
 
@@ -49,7 +50,7 @@ public:
 	~device_LPT() override;
 
 private:
-	char filename[CROSS_LEN] = {};
+	std::string filename = {};
 	std::string cmd = {};
 	int64_t last_access = 0;
 	FILE* handle = nullptr;

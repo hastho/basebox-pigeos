@@ -21,20 +21,23 @@
 #include "dev_lpt.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "dosbox.h"
 
 #include <SDL.h>
 
+constexpr uint32_t QueueCheckIntervalMs = 100;
+
 static std::queue<PrintJob> print_queue;
 static SDL_mutex* queue_mutex = nullptr;
 static SDL_Thread* worker_thread = nullptr;
-static bool shutdown_flag = false;
+static std::atomic<bool> shutdown_flag(false);
 
 static int PrintWorkerThread(void*)
 {
-	while (!shutdown_flag) {
+	while (!shutdown_flag.load()) {
 		PrintJob job;
 		bool has_job = false;
 
@@ -44,6 +47,10 @@ static int PrintWorkerThread(void*)
 			job = print_queue.front();
 			print_queue.pop();
 			has_job = true;
+		} else {
+			SDL_UnlockMutex(queue_mutex);
+			SDL_Delay(QueueCheckIntervalMs);
+			continue;
 		}
 
 		SDL_UnlockMutex(queue_mutex);
@@ -56,8 +63,6 @@ static int PrintWorkerThread(void*)
 				        job.cmd.c_str());
 			}
 			remove(job.filename.c_str());
-		} else {
-			SDL_Delay(100); // 100ms
 		}
 	}
 	return 0;
@@ -66,48 +71,55 @@ static int PrintWorkerThread(void*)
 void LPT_InitPrintQueue()
 {
 	queue_mutex = SDL_CreateMutex();
-	shutdown_flag = false;
+	if (!queue_mutex) {
+		LOG_MSG("LPT: Failed to create mutex");
+		return;
+	}
+	shutdown_flag.store(false);
 	worker_thread = SDL_CreateThread(PrintWorkerThread, "LPT Printer Spooler", nullptr);
+	if (!worker_thread) {
+		LOG_MSG("LPT: Failed to create worker thread");
+		SDL_DestroyMutex(queue_mutex);
+		queue_mutex = nullptr;
+	}
 }
 
 void LPT_ShutdownPrintQueue()
 {
-	shutdown_flag = true;
-
-	SDL_LockMutex(queue_mutex);
-
-	while (!print_queue.empty()) {
-		auto job = print_queue.front();
-		print_queue.pop();
-
-		SDL_UnlockMutex(queue_mutex);
-
-		LOG_MSG("%s: Processing queued job: %s", job.device_name.c_str(), job.cmd.c_str());
-		int result = system(job.cmd.c_str());
-		if (result == -1) {
-			LOG_MSG("%s: Error executing: %s", job.device_name.c_str(), job.cmd.c_str());
-		}
-		remove(job.filename.c_str());
-
-		SDL_LockMutex(queue_mutex);
-	}
-
-	SDL_UnlockMutex(queue_mutex);
+	shutdown_flag.store(true);
 
 	if (worker_thread) {
 		SDL_WaitThread(worker_thread, nullptr);
 		worker_thread = nullptr;
 	}
 
-	SDL_DestroyMutex(queue_mutex);
-	queue_mutex = nullptr;
+	if (queue_mutex) {
+		SDL_LockMutex(queue_mutex);
+		while (!print_queue.empty()) {
+			auto job = print_queue.front();
+			print_queue.pop();
+
+			SDL_UnlockMutex(queue_mutex);
+
+			LOG_MSG("%s: Processing queued job: %s", job.device_name.c_str(), job.cmd.c_str());
+			int result = system(job.cmd.c_str());
+			if (result == -1) {
+				LOG_MSG("%s: Error executing: %s", job.device_name.c_str(), job.cmd.c_str());
+			}
+			remove(job.filename.c_str());
+
+			SDL_LockMutex(queue_mutex);
+		}
+		SDL_UnlockMutex(queue_mutex);
+		SDL_DestroyMutex(queue_mutex);
+		queue_mutex = nullptr;
+	}
 }
 
 device_LPT::device_LPT(const char* name, const char* fname, const char* ncmd)
 {
 	SetName(name);
-	strncpy(filename, fname, CROSS_LEN - 1);
-	filename[CROSS_LEN - 1] = 0;
+	filename = fname;
 	if (ncmd) {
 		cmd = ncmd;
 	}
@@ -124,7 +136,7 @@ bool device_LPT::Read(uint8_t* /*data*/, uint16_t* size)
 bool device_LPT::Write(uint8_t* data, uint16_t* size)
 {
 	if (!handle) {
-		handle = fopen(filename, "ab");
+		handle = fopen(filename.c_str(), "ab");
 		if (!handle) {
 			return false;
 		}
@@ -148,7 +160,6 @@ void device_LPT::Close()
 
 void device_LPT::Flush(uint32_t timeout)
 {
-	char work[CROSS_LEN];
 	int64_t ticks = GetTicks();
 
 	if (last_access == 0 || handle || ticks - last_access < timeout) {
@@ -160,18 +171,21 @@ void device_LPT::Flush(uint32_t timeout)
 	if (cmd.empty()) {
 		LOG_MSG("Output to %s discarded due to configuration settings", GetName());
 	} else {
-		snprintf(work, CROSS_LEN, cmd.c_str(), filename);
+		char work[1024];
+		snprintf(work, sizeof(work), cmd.c_str(), filename.c_str());
 
 		PrintJob job;
 		job.cmd = work;
 		job.filename = filename;
 		job.device_name = GetName();
 
-		SDL_LockMutex(queue_mutex);
-		print_queue.push(job);
-		SDL_UnlockMutex(queue_mutex);
+		if (queue_mutex) {
+			SDL_LockMutex(queue_mutex);
+			print_queue.push(job);
+			SDL_UnlockMutex(queue_mutex);
+		}
 
-		LOG_MSG("%s: %s queued", GetName(), filename);
+		LOG_MSG("%s: %s queued", GetName(), filename.c_str());
 	}
 }
 
@@ -182,5 +196,6 @@ uint16_t device_LPT::GetInformation()
 
 device_LPT::~device_LPT()
 {
+	Close();
 	Flush(0);
 }
