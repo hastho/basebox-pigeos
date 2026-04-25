@@ -32,6 +32,7 @@
 
 static uint32_t Timeout = 0;
 static device_LPT* dev_lpt[MAX_PRINTER_DEVICES] = {};
+static bool spooler_registered = false;
 
 static void Spooler()
 {
@@ -64,16 +65,21 @@ public:
 		}
 
 		TIMER_AddTickHandler(&Spooler);
+		spooler_registered = true;
 
 		path = section->Get_string("tmpdir").c_str();
-		if (!strlen(path)) {
+		if (!path || !strlen(path)) {
 			path = ".";
 		}
 		strncpy(tmpdir, path, CROSS_LEN - 1);
 		tmpdir[CROSS_LEN - 1] = 0;
 
-		if (tmpdir[strlen(tmpdir) - 1] != '/' && tmpdir[strlen(tmpdir) - 1] != '\\') {
-			strcat(tmpdir, "/");
+		size_t len = strlen(tmpdir);
+		if (len > 0 && tmpdir[len - 1] != '/' && tmpdir[len - 1] != '\\') {
+			if (len < CROSS_LEN - 1) {
+				tmpdir[len] = '/';
+				tmpdir[len + 1] = 0;
+			}
 		}
 
 		for (i = 0; i < MAX_PRINTER_DEVICES; i++) {
@@ -96,11 +102,15 @@ public:
 
 	~PRINTERDEV()
 	{
-		int i = 0;
-		TIMER_DelTickHandler(&Spooler);
-		for (i = 0; i < MAX_PRINTER_DEVICES; i++) {
+		if (spooler_registered) {
+			TIMER_DelTickHandler(&Spooler);
+			spooler_registered = false;
+		}
+		for (int i = 0; i < MAX_PRINTER_DEVICES; i++) {
 			if (dev_lpt[i]) {
 				DOS_DelDevice(dev_lpt[i]);
+				delete dev_lpt[i];
+				dev_lpt[i] = nullptr;
 			}
 		}
 	}
