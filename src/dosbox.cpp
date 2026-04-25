@@ -38,6 +38,7 @@
 #include "debug.h"
 #include "dos/dos_locale.h"
 #include "dos_inc.h"
+#include "bios.h"
 #include "hardware.h"
 #include "inout.h"
 #include "ints/int10.h"
@@ -99,6 +100,7 @@ void TANDYSOUND_Init(Section*);
 void LPT_DAC_Init(Section *);
 void PS1AUDIO_Init(Section *);
 void SERIAL_Init(Section*);
+void PRINTER_Init(Section*);
 
 #if C_IPX
 void IPX_Init(Section*);
@@ -566,6 +568,12 @@ static void DOSBOX_RealInit(Section* sec)
 	}
 
 	VGA_SetRatePreference(section->Get_string("dos_rate"));
+
+	// Set permanent host time synchronization
+	dos.hosttime = section->Get_bool("hosttime");
+	if (dos.hosttime) {
+		BIOS_HostTimeSync();
+	}
 }
 
 // Returns decimal seconds of elapsed uptime.
@@ -801,14 +809,21 @@ void DOSBOX_Init()
 	        "you're using a copy-on-write or network-based filesystem, this setting avoids\n"
 	        "triggering write operations for these write-protected files.");
 
-	pbool = secprop->Add_bool("shell_config_shortcuts", when_idle, true);
+pbool = secprop->Add_bool("shell_config_shortcuts", when_idle, true);
 	pbool->Set_help(
 	        "Allow shortcuts for simpler configuration management (enabled by default).\n"
 	        "E.g., instead of 'config -set sbtype sb16', it is enough to execute\n"
 	        "'sbtype sb16', and instead of 'config -get sbtype', you can just execute\n"
 	        "the 'sbtype' command.");
 
+	pbool = secprop->Add_bool("hosttime", when_idle, false);
+	pbool->Set_help(
+	        "Enable permanent host time synchronization.\n"
+	        "When enabled, the DOS clock permanently tracks the host clock,\n"
+	        "including after host sleep/hibernate (disabled by default).");
+
 	// Configure render settings
+
 	RENDER_AddConfigSection(control);
 
 	// Configure composite video settings
@@ -1159,6 +1174,31 @@ void DOSBOX_Init()
 	pstring->Set_help(
 	        "File used to map fake phone numbers to addresses\n"
 	        "('phonebook.txt' by default).");
+
+	// Printer (parallel port) redirection
+	secprop = control->AddSection_prop("printer", &PRINTER_Init);
+	pint = secprop->Add_int("print_timeout", only_at_start, 2000);
+	pint->Set_help(
+	        "Time in milliseconds before spooled print output is sent\n"
+	        "to the host (2000 by default, 0 disables).");
+
+	pstring = secprop->Add_string("tmpdir", only_at_start, "");
+	pstring->Set_help(
+	        "Temporary working directory for print spool files\n"
+	        "(default is current directory).");
+
+	for (int i = 0; i < 4; i++) {
+		char lpt_name[5] = {};
+		snprintf(lpt_name, sizeof(lpt_name), "lpt%d", i + 1);
+		pstring = secprop->Add_string(lpt_name, only_at_start, "disabled");
+		pstring->Set_help(
+		        "Printer output command for LPT" + std::to_string(i + 1) + ":\n"
+		        "  disabled: Discard print output.\n"
+		        "  <command>: Execute command with spool file as argument.\n"
+		        "            Use %s for spool filename.\n"
+		        "Examples: 'lp %%s' (Linux/CUPS), 'lpr %%s' (macOS),\n"
+		        "          'notepad /p %%s' (Windows).");
+	}
 
 	// All the general DOS Related stuff, on real machines mostly located in
 	// CONFIG.SYS

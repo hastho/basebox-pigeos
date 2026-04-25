@@ -937,6 +937,9 @@ struct DOS_Block {
 	bool verify           = {};
 	bool breakcheck       = {};
 
+	// if true, DOS time permanently syncs with host
+	bool hosttime = {};
+
 	// if set to true dev_con::read will echo input
 	bool echo = {};
 

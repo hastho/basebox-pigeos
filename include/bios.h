@@ -142,4 +142,6 @@ void BIOS_SetComPorts (uint16_t baseaddr[]);
 
 bool BIOS_ConfigureTandyDacCallbacks(const std::optional<bool> maybe_request_dac = {});
 
+void BIOS_HostTimeSync();
+
 #endif

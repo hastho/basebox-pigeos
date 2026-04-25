@@ -397,92 +397,61 @@ static Bitu INT11_Handler(void) {
  * Define the following define to 1 if you want dosbox to check 
  * the system time every 5 seconds and adjust 1/2 a second to sync them.
  */
-#ifndef DOSBOX_CLOCKSYNC
-#define DOSBOX_CLOCKSYNC 0
-#endif
 
-static void BIOS_HostTimeSync() {
-	uint32_t milli = 0;
-	// TODO investigate if clock_gettime and ftime can be replaced
-	// by using C++11 chrono
-#if defined(HAVE_CLOCK_GETTIME) && !defined(WIN32)
-	struct timespec tp;
-	clock_gettime(CLOCK_REALTIME,&tp);
+#include <chrono>
+#include <ctime>
 
-	struct tm *loctime;
-	loctime = localtime(&tp.tv_sec);
-	milli = (uint32_t) (tp.tv_nsec / 1000000);
-#else
-	/* Setup time and date */
-	struct timeb timebuffer;
-	ftime(&timebuffer);
+#include "cross.h"
 
-	struct tm *loctime;
-	loctime = localtime (&timebuffer.time);
-	milli = (uint32_t) timebuffer.millitm;
-#endif
-	/*
-	loctime->tm_hour = 23;
-	loctime->tm_min = 59;
-	loctime->tm_sec = 45;
-	loctime->tm_mday = 28;
-	loctime->tm_mon = 2-1;
-	loctime->tm_year = 2007 - 1900;
-	*/
+void BIOS_HostTimeSync() {
+	using namespace std::chrono;
 
-	dos.date.day=(uint8_t)loctime->tm_mday;
-	dos.date.month=(uint8_t)loctime->tm_mon+1;
-	dos.date.year=(uint16_t)loctime->tm_year+1900;
+	auto now = system_clock::now();
 
-	uint32_t ticks=(uint32_t)(((double)(
-		loctime->tm_hour*3600*1000+
-		loctime->tm_min*60*1000+
-		loctime->tm_sec*1000+
-		milli))*(((double)PIT_TICK_RATE/65536.0)/1000.0));
-	mem_writed(BIOS_TIMER,ticks);
+	std::time_t now_c = system_clock::to_time_t(now);
+	std::tm datetime = {};
+	cross::localtime_r(&now_c, &datetime);
+
+	auto duration = now.time_since_epoch();
+	auto milli = duration_cast<milliseconds>(duration).count() % 1000;
+
+	dos.date.day = static_cast<uint8_t>(datetime.tm_mday);
+	dos.date.month = static_cast<uint8_t>(datetime.tm_mon + 1);
+	dos.date.year = static_cast<uint16_t>(datetime.tm_year + 1900);
+
+	uint32_t total_milli = static_cast<uint32_t>(
+		datetime.tm_hour * 3600000 + datetime.tm_min * 60000 +
+		datetime.tm_sec * 1000 + milli
+	);
+
+	uint32_t ticks = static_cast<uint32_t>(
+		static_cast<double>(total_milli) * (PIT_TICK_RATE / 65536.0 / 1000.0)
+	);
+	mem_writed(BIOS_TIMER, ticks);
 }
 
 static Bitu INT8_Handler(void) {
-	/* Increase the bios tick counter */
-	uint32_t value = mem_readd(BIOS_TIMER) + 1;
-	if(value >= 0x1800B0) {
-		// time wrap at midnight
-		mem_writeb(BIOS_24_HOURS_FLAG,mem_readb(BIOS_24_HOURS_FLAG)+1);
-		value=0;
+	/* Check for permanent host time sync */
+	if (dos.hosttime) {
+		BIOS_HostTimeSync();
+	} else {
+		/* Increase the bios tick counter */
+		uint32_t value = mem_readd(BIOS_TIMER) + 1;
+		if (value >= 0x1800B0) {
+			// time wrap at midnight
+			mem_writeb(BIOS_24_HOURS_FLAG, mem_readb(BIOS_24_HOURS_FLAG) + 1);
+			value = 0;
+		}
+		mem_writed(BIOS_TIMER, value);
 	}
-
-#if DOSBOX_CLOCKSYNC
-	static bool check = false;
-	if((value %50)==0) {
-		if(((value %100)==0) && check) {
-			check = false;
-			time_t curtime;struct tm *loctime;
-			curtime = time (NULL);loctime = localtime (&curtime);
-			uint32_t ticksnu = (uint32_t)((loctime->tm_hour * 3600 +
-			                           loctime->tm_min * 60 + loctime->tm_sec) *
-			                          (double)PIT_TICK_RATE / 65536.0);
-			int32_t bios = value;int32_t tn = ticksnu;
-			int32_t diff = tn - bios;
-			if(diff>0) {
-				if(diff < 18) { diff  = 0; } else diff = 9;
-			} else {
-				if(diff > -18) { diff = 0; } else diff = -9;
-			}
-	     
-			value += diff;
-		} else if((value%100)==50) check = true;
-	}
-#endif
-	mem_writed(BIOS_TIMER,value);
 
 	/* decrement FDD motor timeout counter; roll over on earlier PC, stop at zero on later PC */
 	uint8_t val = mem_readb(BIOS_DISK_MOTOR_TIMEOUT);
-	if (val || !IS_EGAVGA_ARCH) mem_writeb(BIOS_DISK_MOTOR_TIMEOUT,val-1);
+	if (val || !IS_EGAVGA_ARCH) mem_writeb(BIOS_DISK_MOTOR_TIMEOUT, val - 1);
 	/* clear FDD motor bits when counter reaches zero */
-	if (val == 1) mem_writeb(BIOS_DRIVE_RUNNING,mem_readb(BIOS_DRIVE_RUNNING) & 0xF0);
+	if (val == 1) mem_writeb(BIOS_DRIVE_RUNNING, mem_readb(BIOS_DRIVE_RUNNING) & 0xF0);
 	return CBRET_NONE;
 }
-#undef DOSBOX_CLOCKSYNC
 
 static Bitu INT1C_Handler(void) {
 	return CBRET_NONE;
