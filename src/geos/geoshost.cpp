@@ -12,8 +12,6 @@
 
 #include "../ints/int10.h"
 #include <SDL.h>
-#include <SDL_net.h>
-
 #include <SDL3_net/SDL_net.h>
 
 #include "tlse.h"
@@ -1151,12 +1149,12 @@ bool IsSegmentAccessible(uint16_t selector, bool isWrite = false)
 		return false;
 	}
 
-	// Real Mode oder VM86: keine Deskriptor-Prüfung nötig
+	// Real Mode oder VM86: keine Deskriptor-Prï¿½fung nï¿½tig
 	if (!cpu.pmode || (reg_flags & FLAG_VM)) {
 		return true;
 	}
 
-	// LDT-Selektor: prüfen ob LDT überhaupt geladen ist
+	// LDT-Selektor: prï¿½fen ob LDT ï¿½berhaupt geladen ist
 	if (selector & 4) {
 		if ((cpu.gdt.SLDT() & 0xFFFC) == 0) {
 			return false;
@@ -1168,7 +1166,7 @@ bool IsSegmentAccessible(uint16_t selector, bool isWrite = false)
 		return false;
 	}
 
-	// Present-Bit prüfen
+	// Present-Bit prï¿½fen
 	if (!desc.saved.seg.p) {
 		return false;
 	}
@@ -1180,7 +1178,7 @@ bool IsSegmentAccessible(uint16_t selector, bool isWrite = false)
 		return false;
 	}
 
-	// Typ-Prüfung
+	// Typ-Prï¿½fung
 	uint8_t type = desc.Type();
 	if (isWrite) {
 		// Muss beschreibbares Datensegment sein
