@@ -249,7 +249,6 @@ jobs:
           name: ${{ steps.set_vars.outputs.pkg_dir }}-with-debugger
           path: ${{ steps.set_vars.outputs.pkg_dir }}/dosbox_with_debugger.exe
           overwrite: true
-          overwrite: true
 
 
   merge_artifacts:
