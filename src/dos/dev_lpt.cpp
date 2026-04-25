@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include "dosbox.h"
 
@@ -38,24 +39,19 @@ static std::atomic<bool> shutdown_flag(false);
 static int PrintWorkerThread(void*)
 {
 	while (!shutdown_flag.load()) {
-		PrintJob job;
-		bool has_job = false;
-
-		SDL_LockMutex(queue_mutex);
-
-		if (!print_queue.empty()) {
-			job = print_queue.front();
-			print_queue.pop();
-			has_job = true;
-		} else {
-			SDL_UnlockMutex(queue_mutex);
+		if (!queue_mutex) {
 			SDL_Delay(QueueCheckIntervalMs);
 			continue;
 		}
 
-		SDL_UnlockMutex(queue_mutex);
+		SDL_LockMutex(queue_mutex);
 
-		if (has_job) {
+		if (!print_queue.empty()) {
+			auto job = print_queue.front();
+			print_queue.pop();
+
+			SDL_UnlockMutex(queue_mutex);
+
 			int result = system(job.cmd.c_str());
 			if (result == -1) {
 				LOG_MSG("%s: Error executing: %s",
@@ -63,6 +59,9 @@ static int PrintWorkerThread(void*)
 				        job.cmd.c_str());
 			}
 			remove(job.filename.c_str());
+		} else {
+			SDL_UnlockMutex(queue_mutex);
+			SDL_Delay(QueueCheckIntervalMs);
 		}
 	}
 	return 0;
@@ -94,23 +93,28 @@ void LPT_ShutdownPrintQueue()
 	}
 
 	if (queue_mutex) {
+		std::vector<PrintJob> remaining_jobs;
+
 		SDL_LockMutex(queue_mutex);
 		while (!print_queue.empty()) {
-			auto job = print_queue.front();
+			remaining_jobs.push_back(print_queue.front());
 			print_queue.pop();
-
-			SDL_UnlockMutex(queue_mutex);
-
-			LOG_MSG("%s: Processing queued job: %s", job.device_name.c_str(), job.cmd.c_str());
-			int result = system(job.cmd.c_str());
-			if (result == -1) {
-				LOG_MSG("%s: Error executing: %s", job.device_name.c_str(), job.cmd.c_str());
-			}
-			remove(job.filename.c_str());
-
-			SDL_LockMutex(queue_mutex);
 		}
 		SDL_UnlockMutex(queue_mutex);
+
+		for (const auto& job : remaining_jobs) {
+			LOG_MSG("%s: Processing queued job: %s",
+			        job.device_name.c_str(),
+			        job.cmd.c_str());
+			int result = system(job.cmd.c_str());
+			if (result == -1) {
+				LOG_MSG("%s: Error executing: %s",
+				        job.device_name.c_str(),
+				        job.cmd.c_str());
+			}
+			remove(job.filename.c_str());
+		}
+
 		SDL_DestroyMutex(queue_mutex);
 		queue_mutex = nullptr;
 	}
@@ -144,7 +148,9 @@ bool device_LPT::Write(uint8_t* data, uint16_t* size)
 		handle = fopen(filename.c_str(), "ab");
 		if (!handle) {
 			write_failed = true;
-			LOG_MSG("%s: Failed to open %s for writing", GetName(), filename.c_str());
+			LOG_MSG("%s: Failed to open %s for writing",
+			        GetName(),
+			        filename.c_str());
 			return false;
 		}
 	}
@@ -183,7 +189,8 @@ void device_LPT::Flush(uint32_t timeout)
 
 	if (cmd.empty() || !cmd_valid) {
 		LOG_MSG("Output to %s discarded: invalid command '%s'",
-		        GetName(), cmd.c_str());
+		        GetName(),
+		        cmd.c_str());
 	} else {
 		char work[1024];
 		snprintf(work, sizeof(work), cmd.c_str(), filename.c_str());

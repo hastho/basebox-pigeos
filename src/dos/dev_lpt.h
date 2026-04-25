@@ -27,6 +27,7 @@
 #include <atomic>
 #include <queue>
 #include <string>
+#include <vector>
 
 struct PrintJob {
 	std::string cmd = {};
