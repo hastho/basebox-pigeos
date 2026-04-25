@@ -9,6 +9,8 @@ on:
       - 'docs/**'
       - 'licenses/**'
       - 'website/**'
+    tags:
+      - 'v*'
 
   pull_request:
     paths-ignore:
@@ -18,10 +20,6 @@ on:
       - 'docs/**'
       - 'licenses/**'
       - 'website/**'
-
-  push:
-    tags:
-      - 'v*'
 
   workflow_dispatch:
 
