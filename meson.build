@@ -1278,10 +1278,6 @@ subdir('src/libs/tal-chorus')
 # A list of DOSBox's bundled 3rd party dependencies,
 # as defined by the above subdir includes. Used for
 # both the executable and libdosbox (unit testing).
-xcb_dep = dependency('xcb')
-xrender_dep = dependency('xrender')
-xfixes_dep = dependency('xfixes')
-
 third_party_deps = [
     atomic_dep,
     stdcppfs_dep,
@@ -1293,9 +1289,6 @@ third_party_deps = [
     tracy_dep,
     libwhereami_dep,
     libtalchorus_dep,
-    xcb_dep,
-    xrender_dep,
-    xfixes_dep,
 ]
 
 if conf_data.get('C_MANYMOUSE') != 0
