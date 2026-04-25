@@ -12,6 +12,9 @@
 
 #include "../ints/int10.h"
 #include <SDL.h>
+
+#define USE_SDL3
+
 #include <SDL3_net/SDL_net.h>
 #ifndef USE_SDL3
 #include <SDL_net.h>
@@ -21,8 +24,6 @@
 #include "tls_root_ca.h"
 
 #if C_GEOSHOST
-
-#define USE_SDL3
 
 #define MAX_ASYNC_OP_SLOTS	16
 
