@@ -105,12 +105,6 @@ jobs:
             build_flags: >-
               -Dbuildtype=minsize
               -Dunit_tests=disabled
-              -Duse_alsa=false
-              -Duse_fluidsynth=false
-              -Duse_mt32emu=false
-              -Duse_opengl=false
-              -Duse_sdl2_net=false
-              -Duse_slirp=false
             needs_all_deps: true
             max_warnings: -1
 
