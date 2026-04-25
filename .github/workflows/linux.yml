@@ -156,7 +156,7 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install -y build-essential libsdl2-dev libopusfile-dev libspeexdsp-dev python3-setuptools
+          sudo apt-get install -y build-essential libsdl2-dev libsdl2-net-dev libpng-dev libopusfile-dev libspeexdsp-dev python3-setuptools
           sudo pip3 install --upgrade meson ninja
       
       # Note: not run for cross builds
