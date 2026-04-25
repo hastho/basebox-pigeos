@@ -111,6 +111,7 @@ jobs:
               -Duse_opengl=false
               -Duse_sdl2_net=false
               -Duse_slirp=false
+              -Duse_x11=false
             needs_min_deps: true
             max_warnings: -1
 
