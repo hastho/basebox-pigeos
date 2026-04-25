@@ -268,7 +268,7 @@ jobs:
       - name: Inject package name
         run: |
           set -x
-          echo "PKG_RELEASE=dosbox-staging-windows-msys2-${{ matrix.conf.arch }}-${{ env.VERSION }}" >> $GITHUB_ENV
+          echo "PKG_RELEASE=basebox-pigeos-windows-msys2-${{ matrix.conf.arch }}-${{ env.VERSION }}" >> $GITHUB_ENV
 
       - name: Setup release build
         run: |

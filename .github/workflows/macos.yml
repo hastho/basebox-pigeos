@@ -203,7 +203,7 @@ jobs:
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           echo "VERSION=$TAG" >> $GITHUB_ENV
-          echo "PKG_DIR=dosbox-staging-macOS-universal-$TAG" >> $GITHUB_ENV
+          echo "PKG_DIR=basebox-pigeos-macOS-universal-$TAG" >> $GITHUB_ENV
 
       - name: Install brew dependencies
         run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --overwrite librsvg
@@ -237,7 +237,7 @@ jobs:
           codesign -s "-" "dist/DOSBox Staging.app" --force --deep -v
 
           hdiutil create \
-              -volname "DOSBox Staging" \
+              -volname "basebox-pigeos" \
               -srcfolder dist \
               -ov -format UDZO "${{ env.PKG_DIR }}.dmg"
 

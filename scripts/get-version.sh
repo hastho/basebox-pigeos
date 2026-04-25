@@ -36,9 +36,11 @@ VERSION=$(
 
 GIT_HASH=$(git rev-parse --short=5 HEAD)
 
+FORK_SUFFIX="pigeos"
+
 case $1 in
-    version)          echo "$VERSION" ;;
+    version)          echo "$VERSION-$FORK_SUFFIX" ;;
     hash)             echo "$GIT_HASH" ;;
-    version-and-hash) echo "$VERSION-$GIT_HASH" ;;
+    version-and-hash) echo "$VERSION-$FORK_SUFFIX-$GIT_HASH" ;;
     *)                usage; exit 1 ;;
 esac
