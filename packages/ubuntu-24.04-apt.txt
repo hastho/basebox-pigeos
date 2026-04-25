@@ -38,3 +38,4 @@ libxkbcommon-dev
 libdecor-0-dev
 libudev-dev
 libvulkan-dev
+libxcb-dev

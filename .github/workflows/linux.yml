@@ -111,7 +111,6 @@ jobs:
               -Duse_opengl=false
               -Duse_sdl2_net=false
               -Duse_slirp=false
-              -Dmanymouse=disabled
             needs_all_deps: true
             max_warnings: -1
 
