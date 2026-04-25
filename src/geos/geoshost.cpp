@@ -220,9 +220,10 @@ private:
 	enum State { IDLE, RESOLVING, CONNECTING, CONNECTED, DONE };
 
 private:
-	IPaddress m_ipAddr;
 	uint16_t m_socketHandle;
-#ifdef USE_SDL3
+#ifndef USE_SDL3
+	IPaddress m_ipAddr;
+#else
 	NET_Address* m_Addr;
 	Uint16 m_Port;
 	State m_State;
@@ -346,9 +347,9 @@ struct SocketState {
 	volatile bool used;
 	volatile bool open;
 	volatile bool blocking;
+#ifndef USE_SDL3
 	TCPsocket socket;
-	//NET_StreamSocket socketSet;
-#ifdef USE_SDL3
+#else
 	NET_StreamSocket* stream;
 #endif
 	char* recvBuf;
@@ -596,11 +597,12 @@ uint16_t AsyncSocketResolveAddr::Init(uint16_t* cmdRec)
 uint16_t 
 AsyncSocketConnect::Init(uint16_t* cmdRec) {
 
+#ifndef USE_SDL3
 	m_ipAddr.host = (((uint32_t)cmdRec[1]) << 16) | cmdRec[2];
 	m_ipAddr.port = ((cmdRec[3] & 0xFF) << 8) | ((cmdRec[3] >> 8) & 0xFF);
 
 	m_socketHandle = cmdRec[4];
-#ifdef USE_SDL3
+#else
 	m_RunOwnThread = false;
 	char hostname[20];
 	sprintf(hostname,
@@ -629,6 +631,7 @@ AsyncSocketConnect::RunAsync() {
 
 
 uint16_t AsyncSocketConnect::PollStatus() {
+#ifdef USE_SDL3
 
 	switch (m_State) {
 	case RESOLVING: 
@@ -670,6 +673,9 @@ uint16_t AsyncSocketConnect::PollStatus() {
 		break;
 	}
 	return 0;
+#else
+	return 0;
+#endif
 }
 
 
@@ -773,6 +779,7 @@ AsyncOp* AsyncOp::Cleanup()
 uint16_t
 AsyncSocketResolveAddr::RunAsync()
 {
+#ifndef USE_SDL3
 	LOG_INFO("NetResolveAddr %s", m_hostname);
 
 	IPaddress ipaddress;
@@ -790,6 +797,9 @@ AsyncSocketResolveAddr::RunAsync()
 	m_Result[0] = HIF_FAILED;
 
 	return 0;
+#else
+	return 0;
+#endif
 }
 
 #ifdef USE_SDL3
