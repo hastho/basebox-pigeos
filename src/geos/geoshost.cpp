@@ -13,6 +13,9 @@
 #include "../ints/int10.h"
 #include <SDL.h>
 #include <SDL3_net/SDL_net.h>
+#ifndef USE_SDL3
+#include <SDL_net.h>
+#endif
 
 #include "tlse.h"
 #include "tls_root_ca.h"
