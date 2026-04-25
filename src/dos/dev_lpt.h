@@ -54,6 +54,8 @@ private:
 	std::string cmd = {};
 	int64_t last_access = 0;
 	FILE* handle = nullptr;
+	bool write_failed = false;
+	bool cmd_valid = false;
 };
 
 void LPT_InitPrintQueue();

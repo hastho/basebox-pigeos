@@ -122,9 +122,11 @@ device_LPT::device_LPT(const char* name, const char* fname, const char* ncmd)
 	filename = fname;
 	if (ncmd) {
 		cmd = ncmd;
+		cmd_valid = (cmd.find("%s") != std::string::npos);
 	}
 	handle = nullptr;
 	last_access = 0;
+	write_failed = false;
 }
 
 bool device_LPT::Read(uint8_t* /*data*/, uint16_t* size)
@@ -135,13 +137,23 @@ bool device_LPT::Read(uint8_t* /*data*/, uint16_t* size)
 
 bool device_LPT::Write(uint8_t* data, uint16_t* size)
 {
+	if (write_failed) {
+		return false;
+	}
 	if (!handle) {
 		handle = fopen(filename.c_str(), "ab");
 		if (!handle) {
+			write_failed = true;
+			LOG_MSG("%s: Failed to open %s for writing", GetName(), filename.c_str());
 			return false;
 		}
 	}
-	return fwrite(data, 1, *size, handle) == *size;
+	if (fwrite(data, 1, *size, handle) != *size) {
+		write_failed = true;
+		LOG_MSG("%s: Write failed to %s", GetName(), filename.c_str());
+		return false;
+	}
+	return true;
 }
 
 bool device_LPT::Seek(uint32_t* /*pos*/, uint32_t /*type*/)
@@ -155,6 +167,7 @@ void device_LPT::Close()
 		fclose(handle);
 		handle = nullptr;
 		last_access = GetTicks();
+		write_failed = false;
 	}
 }
 
@@ -168,8 +181,9 @@ void device_LPT::Flush(uint32_t timeout)
 
 	last_access = 0;
 
-	if (cmd.empty()) {
-		LOG_MSG("Output to %s discarded due to configuration settings", GetName());
+	if (cmd.empty() || !cmd_valid) {
+		LOG_MSG("Output to %s discarded: invalid command '%s'",
+		        GetName(), cmd.c_str());
 	} else {
 		char work[1024];
 		snprintf(work, sizeof(work), cmd.c_str(), filename.c_str());
