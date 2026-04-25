@@ -571,9 +571,6 @@ static void DOSBOX_RealInit(Section* sec)
 
 	// Set permanent host time synchronization
 	dos.hosttime = section->Get_bool("hosttime");
-	if (dos.hosttime) {
-		BIOS_HostTimeSync();
-	}
 }
 
 // Returns decimal seconds of elapsed uptime.

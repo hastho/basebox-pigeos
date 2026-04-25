@@ -436,13 +436,13 @@ static Bitu INT8_Handler(void) {
 		BIOS_HostTimeSync();
 	} else {
 		/* Increase the bios tick counter */
-		uint32_t value = mem_readd(BIOS_TIMER) + 1;
-		if (value >= 0x1800B0) {
+		uint32_t ticks = mem_readd(BIOS_TIMER) + 1;
+		if (ticks >= 0x1800B0) {
 			// time wrap at midnight
 			mem_writeb(BIOS_24_HOURS_FLAG, mem_readb(BIOS_24_HOURS_FLAG) + 1);
-			value = 0;
+			ticks = 0;
 		}
-		mem_writed(BIOS_TIMER, value);
+		mem_writed(BIOS_TIMER, ticks);
 	}
 
 	/* decrement FDD motor timeout counter; roll over on earlier PC, stop at zero on later PC */
