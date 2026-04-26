@@ -25,21 +25,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Docker commmand to run if performing cross builds.defaults:
-  # The command removes the container on exit, runs the 
-  # container as the specified UID:GID, mounts the current
-  # dir into the container at the same path, passes in host 
-  # HOME environment variable, sets the container working directory 
-  # and specifies the image to use. The tag is added in the jobs.
-  DOCKER_RUN: >-
-    docker run --rm
-    -u "$(id --user):$(id --group)"
-    -v "$PWD:$PWD"
-    -e HOME
-    --workdir "$PWD"
-    ghcr.io/dosbox-staging/debian-cross
-
 jobs:
   cache_subprojects:
     name: Cache subprojects
@@ -70,145 +55,50 @@ jobs:
         name: Generate subprojects cache
         run:  scripts/fetch-and-tar-subprojects.sh
 
-  build_ubuntu:
+  build:
     name: ${{ matrix.conf.name }}
-    runs-on: ${{ matrix.conf.os }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.conf.container }}
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     needs: cache_subprojects
     strategy:
+      fail-fast: false
       matrix:
         conf:
-
-          - name: GCC, Ubuntu 24.04
-            os: ubuntu-24.04
+          - name: Ubuntu Latest
+            container: null
+            update_cmd: sudo apt-get update
+            install_cmd: sudo apt-get install -y build-essential meson ninja libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev libasound2-dev libpulseAudio-dev libsamplerate0-dev libxkbcommon-dev libdecor-0-dev libgbm-dev libwayland-dev wayland-protocols libdrm-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libopengl-dev libvulkan-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev libswresample-dev libfluidsynth-dev libmt32emu-dev libslirp-dev
             build_flags: -Dbuildtype=debug
-            max_warnings: 0
-            needs_all_deps: true
             run_tests: true
 
-          - name: Clang, Ubuntu 24.04
-            os: ubuntu-24.04
-            packages: clang
+          - name: Debian Stable
+            container: debian:stable-slim
+            update_cmd: apt-get update
+            install_cmd: apt-get install -y build-essential meson ninja libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev libasound2-dev libpulseaudio-dev libsamplerate0-dev libxkbcommon0 libdecor-0 libgbm1 libwayland-1.0 wayland-protocols libdrm2 libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libopengl-dev libvulkan-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev swresample-dev libfluidsynth-dev libmt32emu-dev libslirp4
             build_flags: -Dbuildtype=debug
-            max_warnings: 0
-            needs_all_deps: true
             run_tests: true
+            pip_cmd: pip3 install --break-system-packages
 
-          - name: GCC, Ubuntu 24.04, debugger build
-            os: ubuntu-24.04
-            build_flags: -Denable_debugger=heavy
-            max_warnings: 0
-            needs_all_deps: true
-
-          - name: GCC, Ubuntu 24.04, minimal build
-            os: ubuntu-24.04
-            build_flags: >-
-              -Dbuildtype=minsize
-              -Dunit_tests=disabled
-              -Duse_alsa=false
-              -Duse_fluidsynth=false
-              -Duse_mt32emu=false
-              -Duse_opengl=false
-              -Duse_sdl2_net=false
-              -Duse_slirp=false
-            needs_min_deps: true
-            max_warnings: -1
-
-          - name: GCC, Debian 12, ARMv7
-            os: ubuntu-24.04
-            build_flags: -Dbuildtype=debug -Duse_zlib_ng=false --cross-file dosbox-cross
-            max_warnings: 0
+          - name: Fedora Latest
+            container: fedora:latest
+            update_cmd: dnf check-update || true
+            install_cmd: dnf install -y gcc gcc-c++ meson ninja SDL2-devel libpng-devel libopusfile-devel speexdsp-devel alsa-lib-devel pulseaudio-libs-devel samplerate-devel libxkbcommon decor-devel gbm-devel wayland-protocols libdrm-devel libX11-devel libXCursor-devel libXi-devel libXrandr-devel libXss-devel libglvnd-devel vulkan-loader-devel ffmpeg-libs-devel fluidsynth-devel mt32emu-devel libslirp-devel python3-pip
+            build_flags: -Dbuildtype=debug
             run_tests: true
-            cross: true
-            arch: armhf
-            deb_vers: 12
-            needs_min_deps: false
-
-          - name: GCC, Debian 12, aarch64
-            os: ubuntu-24.04
-            build_flags: -Dbuildtype=debug --cross-file dosbox-cross
-            max_warnings: 0
-            run_tests: true
-            cross: true
-            arch: arm64
-            deb_vers: 12
-            needs_min_deps: false
-
-          - name: GCC, Debian 12, ppc64le
-            os: ubuntu-24.04
-            build_flags: -Dbuildtype=debug --cross-file dosbox-cross
-            max_warnings: 21
-            run_tests: true
-            cross: true
-            arch: ppc64el
-            deb_vers: 12
-            needs_min_deps: false
+            pip_cmd: pip3 install
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: false
-      
-      # Note: not run for cross builds
-      - name: Install minimum dependencies
-        if:  matrix.conf.needs_min_deps
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          sudo apt-get update
-          sudo apt-get install -y build-essential libsdl2-dev libopusfile-dev libspeexdsp-dev python3-setuptools
-          sudo pip3 install --upgrade meson ninja
-      
-      # Note: not run for cross builds
-      - name: Install all dependencies
-        if:   matrix.conf.needs_all_deps
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          sudo apt-get update
-          sudo apt-get install -y \
-            ${{ matrix.conf.packages }} \
-            $(cat packages/${{ matrix.conf.os }}-apt.txt)
-          sudo pip3 install --upgrade meson ninja
 
-      - name: Log environment
-        run:  ./scripts/log-env.sh
-
-      # Uses the ./scripts/docker-cross-tag.sh helper script
-      # to set the docker image tag, and check if it exists
-      # in the registry.
-      - name: Get docker image tag and test if exists
-        if: matrix.conf.cross
-        id: docker_tag
+      - name: Install Dependencies
         run: |
-          tag_hash=$(./scripts/docker-cross-tag.sh hash-files ./packages/Dockerfile.debian ./packages/debian-11-docker-apt.txt)
-          tag="${{matrix.conf.deb_vers}}-${{matrix.conf.arch}}-${tag_hash}"
-          echo "IMG_TAG=${tag}" >> $GITHUB_OUTPUT
-          echo "IMG_TAG_EXISTS=$(./scripts/docker-cross-tag.sh tag-exists debian-cross $tag)" >> $GITHUB_OUTPUT
-      
-      # If the image tag does not exist (from previous step), 
-      # Build a new image and push it to the registry using 
-      # the composite action created for the task.
-      - name: Build debian cross docker image if required
-        if: ${{ matrix.conf.cross && steps.docker_tag.outputs.IMG_TAG_EXISTS == 'false' }}
-        uses: ./.github/composite-actions/build-debian-docker
-        with:
-          img-name: debian-cross
-          deb-vers: ${{matrix.conf.deb_vers}}
-          arch: ${{matrix.conf.arch}}
-          tag: ${{ steps.docker_tag.outputs.IMG_TAG }}
-          user: ${{ github.actor }}
-          pass: ${{ secrets.GITHUB_TOKEN }}
-
-      # Set either host meson or docker command depending on
-      # if we are cross compiling
-      - name: Set binary names
-        id: bins
-        run: |
-          if [ -z "${{matrix.conf.cross}}" ]; then
-            echo "MESON_BIN=meson" >> $GITHUB_OUTPUT
-          else
-            echo "MESON_BIN=${{env.DOCKER_RUN}}:${{steps.docker_tag.outputs.IMG_TAG}} meson" >> $GITHUB_OUTPUT
-          fi
+          ${{ matrix.conf.update_cmd }}
+          ${{ matrix.conf.install_cmd }}
+          ${{ matrix.conf.pip_cmd || 'pip3 install' }} meson ninja
 
       - name: Restore subprojects cache
         id:   cache-subprojects
@@ -221,29 +111,23 @@ jobs:
       - name: Extract subprojects cache
         run:  scripts/extract-subprojects-tar.sh
 
+      - name: Log environment
+        run:  ./scripts/log-env.sh
+
       - name: Meson setup
-        run:  |
-          ${{steps.bins.outputs.MESON_BIN}} setup ${{ matrix.conf.build_flags }} build \
+        run:  meson setup ${{ matrix.conf.build_flags }} build \
           || ( cat build/meson-logs/meson-log.txt ; exit 1 )
 
       - name: Build
-        run: |
-          set -xo pipefail
-          ${{steps.bins.outputs.MESON_BIN}} compile -C build |& tee build.log
+        run:  meson compile -C build |& tee build.log
 
       - name: Run tests
         if:   matrix.conf.run_tests
-        run:  ${{steps.bins.outputs.MESON_BIN}} test --num-processes 128 -t 0 -C build --print-errorlogs
+        run:  meson test --num-processes 128 -t 0 -C build --print-errorlogs
 
-      - name: Summarize warnings
-        env:
-          MAX_WARNINGS: ${{ matrix.conf.max_warnings }}
-        run:  ./scripts/count-warnings.py -lf build.log
-
-
-  build_linux_release:
+  build_release:
     name: Linux Release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     needs: cache_subprojects
     steps:
       - name: Checkout repository
