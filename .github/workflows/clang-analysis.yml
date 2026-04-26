@@ -1,119 +1,54 @@
-name: Clang analysis
+build_clang_static_analyser:
+  name: Clang static analyzer
+  runs-on: ubuntu-24.04 # Upgrade auf die aktuellste Version
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-on:
-  push:
-    paths-ignore:
-      - '.clang-format'
-      - '.mdl-styles'
-      - '*.md'
-      - 'docs/**'
-      - 'licenses/**'
-      - 'website/**'
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        # Meson & Ninja direkt über apt, um den PIP-Fehler zu vermeiden
+        sudo apt-get install -y clang-tools meson ninja-build python3-bs4 \
+          $(cat packages/ubuntu-24.04-apt.txt)
 
-  pull_request:
-    paths-ignore:
-      - '.clang-format'
-      - '.mdl-styles'
-      - '*.md'
-      - 'docs/**'
-      - 'licenses/**'
-      - 'website/**'
+    - name: Restore subprojects cache
+      uses: actions/cache@v4
+      with:
+        path: subprojects.tar
+        key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    - name: Extract or Fetch subprojects
+      run: |
+        if [ -f subprojects.tar ]; then
+          tar -xf subprojects.tar
+        else
+          chmod +x scripts/fetch-and-tar-subprojects.sh
+          ./scripts/fetch-and-tar-subprojects.sh
+          tar -xf subprojects.tar
+        fi
 
-env:
-  CCACHE_DIR:        "/dev/shm/.ccache"
-  CCACHE_MAXSIZE:    "128M"
-  CCACHE_COMPRESS:   "true"
-  CCACHE_SLOPPINESS: "pch_defines,time_macros"
-
-jobs:
-  build_clang_static_analyser:
-    name: Clang static analyzer
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Update packages
-        run:  sudo apt-get update
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get install clang-tools python3-bs4 $(cat packages/ubuntu-22.04-apt.txt)
-          sudo pip3 install --upgrade meson ninja
-
-      - name:  Prepare compiler cache
-        id:    prep-ccache
-        shell: bash
-        run: |
-          mkdir -p "${CCACHE_DIR}"
-          echo "dir=$CCACHE_DIR"                       >> $GITHUB_OUTPUT
-          echo "today=$(date -I)"                      >> $GITHUB_OUTPUT
-          echo "yesterday=$(date --date=yesterday -I)" >> $GITHUB_OUTPUT
-
-      - uses:  actions/cache@v4
-        id:    cache-ccache
-        with:
-          path: ${{ steps.prep-ccache.outputs.dir }}
-          key:  ccache-static-clang-${{ steps.prep-ccache.outputs.today }}
-          restore-keys: |
-            ccache-static-clang-${{ steps.prep-ccache.outputs.yesterday }}
-
-      - name: Cache subprojects
-        id:   cache-subprojects
-        uses: actions/cache@v4
-        with:
-          path: subprojects.tar
-          key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
-          enableCrossOsArchive: true
-
-      - name: Generate subprojects cache
-        if:   steps.cache-subprojects.outputs.cache-hit != 'true'
-        run:  scripts/fetch-and-tar-subprojects.sh
-
-      - name: Extract subprojects cache
-        run:  scripts/extract-subprojects-tar.sh
-
-      - name: Log environment
-        run:  ./scripts/log-env.sh
-
-      - name: Meson setup
-        run: |
-          meson setup \
+    - name: Meson setup
+      run: |
+        meson setup build \
           -Dbuildtype=debug \
-          -Duse_alsa=false \
-          -Duse_fluidsynth=false \
-          -Duse_mt32emu=false \
-          -Duse_opengl=false \
-          -Duse_sdl2_net=false \
-          -Duse_slirp=false \
-          -Duse_zlib_ng=false \
           -Dunit_tests=disabled \
-          build
+          -Duse_alsa=false \
+          -Duse_opengl=false \
+          -Duse_zlib_ng=false
 
-      - name: Build and run scan-build
-        run: |
-          set -x
-          ninja -C build scan-build
-          mv build/meson-logs/scanbuild report
+    - name: Build and run scan-build
+      run: |
+        # Ninja führt den Clang Static Analyzer über das gesamte Projekt aus
+        ninja -C build scan-build
+        mv build/meson-logs/scanbuild report
 
-      - name: Upload report
-        uses: actions/upload-artifact@v4.3.1
-        with:
-          name: clang-analysis-report
-          path: report
+    - name: Upload report
+      uses: actions/upload-artifact@v4
+      with:
+        name: clang-analysis-report
+        path: report
 
-      - name: Summarize report
-        env:
-          MAX_BUGS: 3
-        run: |
-          # summary
-          echo "Full report is included in build artifacts"
-          echo
-          ./scripts/count-clang-bugs.py report/*/index.html
+    - name: Summarize report
+      run: ./scripts/count-clang-bugs.py report/*/index.html
 
