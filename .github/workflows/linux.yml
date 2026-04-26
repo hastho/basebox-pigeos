@@ -81,6 +81,24 @@ jobs:
             run_tests: false
             needs_pip: true
 
+          - name: Fedora Latest (Docker)
+            container: fedora:latest
+            update_cmd: dnf check-update || true
+            install_cmd: >-
+              dnf install -y 
+              gcc gcc-c++ meson ninja-build cmake pkgconf-pkg-config git tar
+              SDL2-devel libpng-devel opusfile-devel speexdsp-devel 
+              alsa-lib-devel libXi-devel python3-pip
+
+          - name: Debian Stable (Docker)
+            container: debian:stable
+            update_cmd: apt-get update
+            install_cmd: >-
+              apt-get install -y 
+              build-essential meson ninja-build 
+              libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev 
+              python3-pip git tar ca-certificates
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
