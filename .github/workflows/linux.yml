@@ -99,7 +99,7 @@ jobs:
         run: |
           ${{ matrix.conf.update_cmd }}
           ${{ matrix.conf.install_cmd }}
-          ${{ matrix.conf.needs_pip && 'pip3 install meson ninja' || '' }}
+          ${{ matrix.conf.needs_pip && 'pip3 install --break-system-packages meson ninja || sudo pip3 install --break-system-packages meson ninja' || '' }}
 
       - name: Restore subprojects cache
         id:   cache-subprojects
