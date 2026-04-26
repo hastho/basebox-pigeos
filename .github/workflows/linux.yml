@@ -84,7 +84,7 @@ jobs:
           - name: Fedora Latest
             container: fedora:latest
             update_cmd: dnf check-update || true
-            install_cmd: dnf install -y gcc gcc-c++ SDL2-devel libpng-devel opusfile-devel speexdsp-devel python3-pip
+            install_cmd: dnf install -y gcc gcc-c++ meson ninja cmake pkgconf-pkg-config git tar SDL2-devel libpng-devel opusfile-devel speexdsp-devel alsa-lib-devel libXi-devel python3-pip
             build_flags: -Dbuildtype=debug
             run_tests: false
             needs_pip: true
