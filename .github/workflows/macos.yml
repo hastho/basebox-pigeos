@@ -52,8 +52,8 @@ jobs:
           strip = 'strip'
 
           [built-in options]
-          c_args = ['-arch', 'x86_64', '-march=x86-64', '-mmacosx-version-min=11.0']
-          cpp_args = ['-arch', 'x86_64', '-march=x86-64', '-mmacosx-version-min=11.0']
+          c_args = ['-arch', 'x86_64', '-mmacosx-version-min=11.0']
+          cpp_args = ['-arch', 'x86_64', '-mmacosx-version-min=11.0']
           c_link_args = ['-arch', 'x86_64']
           cpp_link_args = ['-arch', 'x86_64']
 
@@ -66,15 +66,13 @@ jobs:
           cpu = 'x86_64'
           endian = 'little'
           EOF
-          export CFLAGS="-arch x86_64 -march=x86-64"
-          export CXXFLAGS="-arch x86_64 -march=x86-64"
           meson setup build_x86 \
             --cross-file macos_x86_64.ini \
             --wrap-mode=forcefallback \
             -Dbuildtype=release \
             -Dstrip=true \
             -Dautovec_info=false \
-            -Dspeexdsp:neon=disabled || (cat build_x86/meson-logs/meson-log.txt && exit 1)
+            -Dspeexdsp:neon=disabled
           meson compile -C build_x86
 
       - name: Build arm64 (Apple Silicon)
