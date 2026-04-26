@@ -49,8 +49,8 @@ jobs:
             -Dcpp_args="-arch x86_64" \
             -Dc_link_args="-arch x86_64" \
             -Dcpp_link_args="-arch x86_64" \
-            -Dspeexdsp:neon=disabled
-          meson configure build_x86 -Dspeexdsp:neon=disabled
+            --wrap-mode=forcefallback \
+            -Dspeexdsp:neon=disabled || (cat build_x86/meson-logs/meson-log.txt && exit 1)
           meson compile -C build_x86
 
       - name: Build arm64 (Apple Silicon)
