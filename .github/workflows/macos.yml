@@ -49,10 +49,8 @@ jobs:
             -Dcpp_args="-arch x86_64" \
             -Dc_link_args="-arch x86_64" \
             -Dcpp_link_args="-arch x86_64" \
-            --host-machine-system darwin \
-            --host-machine-cpu x86_64 \
-            --host-machine-endian little \
             -Dspeexdsp:neon=disabled
+          meson configure build_x86 -Dspeexdsp:neon=disabled
           meson compile -C build_x86
 
       - name: Build arm64 (Apple Silicon)
