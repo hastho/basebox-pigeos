@@ -68,7 +68,7 @@ jobs:
           - name: Ubuntu Latest
             container: null
             update_cmd: sudo apt-get update
-            install_cmd: sudo apt-get install -y build-essential libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev
+            install_cmd: sudo apt-get install -y build-essential meson ninja libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev git tar
             build_flags: -Dbuildtype=debug
             run_tests: false
             needs_pip: true
@@ -76,7 +76,7 @@ jobs:
           - name: Debian Stable
             container: debian:stable-slim
             update_cmd: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl
-            install_cmd: apt-get install -y build-essential libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev python3-pip
+            install_cmd: apt-get install -y build-essential meson ninja libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev python3-pip git tar
             build_flags: -Dbuildtype=debug
             run_tests: false
             needs_pip: true
