@@ -130,6 +130,8 @@ jobs:
     name: Linux Release
     runs-on: ubuntu-latest
     needs: cache_subprojects
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -190,7 +192,7 @@ jobs:
           tar -cJf "${{ env.PKG_DIR }}.tar.xz" "${{ env.PKG_DIR }}"
 
       - name: Create GitHub Release
-        uses: softprops/release-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ env.PKG_DIR }}.tar.xz

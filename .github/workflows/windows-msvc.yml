@@ -266,6 +266,8 @@ jobs:
     name: Build Windows installer
     needs: merge_windows_artifacts
     runs-on: windows-2022
+    permissions:
+      contents: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -314,7 +316,7 @@ jobs:
           dir
 
       - name: Create GitHub Release
-        uses: softprops/release-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             out/${{ steps.set_vars.outputs.pkg_dir }}-setup.exe

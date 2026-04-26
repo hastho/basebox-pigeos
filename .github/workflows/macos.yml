@@ -193,6 +193,8 @@ jobs:
     name: Publish macOS Release
     needs: build_macos_release
     runs-on: macos-14
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -242,7 +244,7 @@ jobs:
               -ov -format UDZO "${{ env.PKG_DIR }}.dmg"
 
       - name: Create GitHub Release
-        uses: softprops/release-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ env.PKG_DIR }}.dmg
