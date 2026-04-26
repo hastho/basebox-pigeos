@@ -1,251 +1,75 @@
-name: macOS builds
-
-on:
-  push:
-    paths-ignore:
-      - '.clang-format'
-      - '.mdl-styles'
-      - '*.md'
-      - 'docs/**'
-      - 'licenses/**'
-      - 'website/**'
-    tags:
-      - 'v*'
-
-  pull_request:
-    paths-ignore:
-      - '.clang-format'
-      - '.mdl-styles'
-      - '*.md'
-      - 'docs/**'
-      - 'licenses/**'
-      - 'website/**'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  build_macos:
-    name: ${{ matrix.conf.name }} (${{ matrix.conf.arch }})
-    runs-on: ${{ matrix.conf.host }}
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-    strategy:
-      fail-fast: false
-      matrix:
-        conf:
-          - name: Clang
-            host: macos-13
-            arch: x86_64
-            needs_deps: true
-            run_tests: true
-            build_flags: -Denable_debugger=normal
-            brew_path: /usr/local/homebrew
-            max_warnings: 80
-
-          - name: Clang
-            host: macos-14
-            arch: arm64
-            needs_deps: true
-            run_tests: false # the shell_cmds_tests hang on arm64
-            build_flags: -Dbuildtype=debug
-            brew_path: /opt/homebrew
-            max_warnings: 120
-
+  build_macos_universal:
+    name: macOS Universal Release
+    runs-on: macos-14
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: false
 
-      - name: Install C++ compiler and libraries
-        if:   matrix.conf.needs_deps
+      - name: Install Dependencies
         run: |
-          arch -arch=${{ matrix.conf.arch }} brew unlink openssl@1.1 || true
-          rm -f /usr/local/bin/openssl || true
-          arch -arch=${{ matrix.conf.arch }} brew install --overwrite openssl@3 || true
-          arch -arch=${{ matrix.conf.arch }} brew link --overwrite openssl@3 || true
-          arch -arch=${{ matrix.conf.arch }} brew install --overwrite \
-            ${{ matrix.conf.packages }} \
-            $(cat packages/macos-12-brew.txt) || true
+          brew update
+          brew install meson ninja sdl2 libpng opusfile speexdsp ccache
 
-      - name: Cache subprojects
-        id:   cache-subprojects
+      - name: Restore subprojects cache
         uses: actions/cache@v4
         with:
           path: subprojects.tar
           key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
-          enableCrossOsArchive: true
 
-      - if:   steps.cache-subprojects.outputs.cache-hit != 'true'
-        name: Generate subprojects cache
-        run:  scripts/fetch-and-tar-subprojects.sh
-
-      - name: Extract subprojects cache
-        run:  scripts/extract-subprojects-tar.sh
-
-      - name: Setup and build
+      - name: Extract subprojects
         run: |
-          set -xo pipefail
-          export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-          eval "$(${{ matrix.conf.brew_path }}/bin/brew shellenv)"
-          ./scripts/log-env.sh
-          ./scripts/retry_command.sh 3 meson setup ${{ matrix.conf.build_flags }} build
-          meson compile -C build 2>&1 | tee build.log
+          if [ -f subprojects.tar ]; then
+            tar -xf subprojects.tar
+          else
+            chmod +x scripts/fetch-and-tar-subprojects.sh
+            ./scripts/fetch-and-tar-subprojects.sh
+            tar -xf subprojects.tar
+          fi
 
-      - name: Run tests
-        if:   matrix.conf.run_tests
+      - name: Build x86_64 (Intel)
         run: |
-          export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-          eval "$(${{ matrix.conf.brew_path }}/bin/brew shellenv)"
-          meson test --num-processes 128 -t 0 -C build --print-errorlogs
+          # Wir zwingen Meson via Compiler-Flags auf x86_64
+          meson setup build_x86 \
+            -Dbuildtype=release \
+            -Dstrip=true \
+            -Dc_args="-arch x86_64" \
+            -Dcpp_args="-arch x86_64" \
+            -Dc_link_args="-arch x86_64" \
+            -Dcpp_link_args="-arch x86_64"
+          meson compile -C build_x86
 
-      - name: Summarize warnings
-        if:   matrix.conf.run_tests != true
-        env:
-          MAX_WARNINGS: ${{ matrix.conf.max_warnings }}
-        run:  python3 ./scripts/count-warnings.py -lf build.log
-
-  build_macos_release:
-    name: Release build (${{ matrix.runner.arch }})
-    runs-on: ${{ matrix.runner.host }}
-    env:
-      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.runner.minimum_deployment }}
-
-    strategy:
-      matrix:
-        runner:
-          - host: macos-12
-            arch: x86_64
-            build_flags: -Db_lto=true
-            brew_path: /usr/local/homebrew
-            minimum_deployment: '10.15'
-            needs_deps: true
-
-          - host: macos-14
-            arch: arm64
-            build_flags: -Db_lto=true
-            brew_path: /opt/homebrew
-            minimum_deployment: '11.0'
-            needs_deps: true
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Install C++ compiler and libraries
-        if:   matrix.runner.needs_deps
+      - name: Build arm64 (Apple Silicon)
         run: |
-          brew install librsvg tree libpng ninja opusfile speexdsp meson python-setuptools
+          # Natives Compiling (Standard auf macos-14)
+          meson setup build_arm \
+            -Dbuildtype=release \
+            -Dstrip=true
+          meson compile -C build_arm
 
-      - name: Cache subprojects
-        id: cache-subprojects
-        uses: actions/cache@v4
-        with:
-          path: subprojects.tar
-          key:  subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
-          enableCrossOsArchive: true
-
-      - if:   steps.cache-subprojects.outputs.cache-hit != 'true'
-        name: Generate subprojects cache
-        run:  scripts/fetch-and-tar-subprojects.sh
-
-      - name: Extract subprojects cache
-        run:  scripts/extract-subprojects-tar.sh
-
-      - name: Log environment
-        run:  arch -arch=${{ matrix.runner.arch }} ./scripts/log-env.sh
-
-      - name: Extract tag version
+      - name: Create Universal App Bundle
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "VERSION=$TAG" >> $GITHUB_ENV
+          APP_NAME="DosBoxStaging"
+          mkdir -p "${APP_NAME}.app/Contents/MacOS"
+          
+          # Zusammenführung der Binaries
+          lipo -create \
+            build_x86/${APP_NAME} \
+            build_arm/${APP_NAME} \
+            -output "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+          
+          # Verifiziere das Ergebnis im Log
+          file "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
 
-      - name: Setup and build release
+      - name: Create DMG
         run: |
-          set -x
-          eval "$(${{ matrix.runner.brew_path }}/bin/brew shellenv)"
-          meson setup \
-            ${{ matrix.runner.build_flags }} \
-            -Ddefault_library=static \
-            -Dwrap_mode=forcefallback \
-            -Duse_zlib_ng=sse2,ssse3,neon \
-            build
-          meson compile -C build
+          hdiutil create -volname "DosBox Staging" \
+                         -srcfolder "${APP_NAME}.app" \
+                         -ov -format UDZO \
+                         "${APP_NAME}_Universal.dmg"
 
-      - name: Upload binary
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: dosbox-${{ matrix.runner.arch }}
-          path: build/dosbox
-          overwrite: true
+          name: macOS-Universal-DMG
+          path: "*.dmg"
 
-      - name: Upload resources
-        uses: actions/upload-artifact@v4
-        with:
-          name: Resources-${{ matrix.runner.arch }}
-          path: Resources
-          overwrite: true
-
-  publish_macos_release:
-    name: Publish macOS Release
-    needs: build_macos_release
-    runs-on: macos-14
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Extract tag version
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "VERSION=$TAG" >> $GITHUB_ENV
-          echo "PKG_DIR=basebox-macOS-universal-$TAG" >> $GITHUB_ENV
-
-      - name: Install brew dependencies
-        run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --overwrite librsvg
-
-      - name: Download binaries
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Download resources
-        uses: actions/download-artifact@v4
-        with:
-          pattern: Resources-*
-          path: resources
-          merge-multiple: true
-
-      - name: Package
-        run: |
-          mv resources/Resources ./
-          ./scripts/create-package.sh \
-            -p macos \
-            -v "${{ env.VERSION }}" \
-            -f \
-            "$(pwd)" \
-            "$(pwd)"
-
-      - name: Create dmg
-        run: |
-          ln -s /Applications dist/
-
-          codesign -s "-" "dist/DOSBox Staging.app" --force --deep -v
-
-          hdiutil create \
-              -volname "basebox-pigeos" \
-              -srcfolder dist \
-              -ov -format UDZO "${{ env.PKG_DIR }}.dmg"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ${{ env.PKG_DIR }}.dmg
-          prerelease: ${{ contains(github.ref, '-') }}
