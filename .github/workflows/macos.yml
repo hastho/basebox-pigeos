@@ -59,6 +59,7 @@ jobs:
 
           [properties]
           needs_exe_wrapper = true
+          skip_sanity_check = true
 
           [host_machine]
           system = 'darwin'
