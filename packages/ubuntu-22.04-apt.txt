@@ -20,3 +20,4 @@ libavutil-dev
 libswscale-dev
 libavformat-dev
 libswresample-dev
+libxcb-dev
