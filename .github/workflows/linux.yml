@@ -109,14 +109,21 @@ jobs:
           key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
           enableCrossOsArchive: true
 
-      - name: Extract subprojects cache
-        run:  scripts/extract-subprojects-tar.sh
+      - name: Extract or Fetch subprojects
+        run: |
+          if [ -f subprojects.tar ]; then
+            tar -xf subprojects.tar
+          else
+            echo "Cache miss: Fetching subprojects..."
+            scripts/fetch-and-tar-subprojects.sh
+            tar -xf subprojects.tar
+          fi
 
       - name: Log environment
         run:  ./scripts/log-env.sh
 
       - name: Meson setup
-        run:  meson setup ${{ matrix.conf.build_flags }} build || ( cat build/meson-logs/meson-log.txt ; exit 1 )
+        run:  meson setup --wrap-mode=forcefallback ${{ matrix.conf.build_flags }} build || ( cat build/meson-logs/meson-log.txt ; exit 1 )
 
       - name: Build
         run:  meson compile -C build |& tee build.log
@@ -153,8 +160,15 @@ jobs:
           key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
           enableCrossOsArchive: true
 
-      - name: Extract subprojects cache
-        run:  scripts/extract-subprojects-tar.sh
+      - name: Extract or Fetch subprojects
+        run: |
+          if [ -f subprojects.tar ]; then
+            tar -xf subprojects.tar
+          else
+            echo "Cache miss: Fetching subprojects..."
+            scripts/fetch-and-tar-subprojects.sh
+            tar -xf subprojects.tar
+          fi
 
       - name: Log environment
         run:  ./scripts/log-env.sh
