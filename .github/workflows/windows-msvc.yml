@@ -167,6 +167,7 @@ jobs:
           set -x
           TAG=${GITHUB_REF#refs/tags/}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "build_dir=vs/${{ matrix.arch }}/Release" >> $GITHUB_OUTPUT
           echo "pkg_dir=basebox-windows-${{ matrix.arch }}-${TAG}" >> $GITHUB_OUTPUT
 
       - name:  Set the Git hash in config.h
