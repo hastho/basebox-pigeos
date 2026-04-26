@@ -1,54 +1,71 @@
-build_clang_static_analyser:
-  name: Clang static analyzer
-  runs-on: ubuntu-24.04 # Upgrade auf die aktuellste Version
-  steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+name: Clang analysis
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        # Meson & Ninja direkt über apt, um den PIP-Fehler zu vermeiden
-        sudo apt-get install -y clang-tools meson ninja-build python3-bs4 \
-          $(cat packages/ubuntu-24.04-apt.txt)
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
-    - name: Restore subprojects cache
-      uses: actions/cache@v4
-      with:
-        path: subprojects.tar
-        key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
-    - name: Extract or Fetch subprojects
-      run: |
-        if [ -f subprojects.tar ]; then
-          tar -xf subprojects.tar
-        else
-          chmod +x scripts/fetch-and-tar-subprojects.sh
-          ./scripts/fetch-and-tar-subprojects.sh
-          tar -xf subprojects.tar
-        fi
+jobs:
+  build_clang_static_analyser:
+    name: Clang static analyzer
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Meson setup
-      run: |
-        meson setup build \
-          -Dbuildtype=debug \
-          -Dunit_tests=disabled \
-          -Duse_alsa=false \
-          -Duse_opengl=false \
-          -Duse_zlib_ng=false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tools meson ninja-build python3-bs4 \
+            $(cat packages/ubuntu-24.04-apt.txt)
 
-    - name: Build and run scan-build
-      run: |
-        # Ninja führt den Clang Static Analyzer über das gesamte Projekt aus
-        ninja -C build scan-build
-        mv build/meson-logs/scanbuild report
+      - name: Restore subprojects cache
+        uses: actions/cache@v4
+        with:
+          path: subprojects.tar
+          key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
 
-    - name: Upload report
-      uses: actions/upload-artifact@v4
-      with:
-        name: clang-analysis-report
-        path: report
+      - name: Extract or Fetch subprojects
+        run: |
+          if [ -f subprojects.tar ]; then
+            tar -xf subprojects.tar
+          else
+            chmod +x scripts/fetch-and-tar-subprojects.sh
+            ./scripts/fetch-and-tar-subprojects.sh
+            tar -xf subprojects.tar
+          fi
 
-    - name: Summarize report
-      run: ./scripts/count-clang-bugs.py report/*/index.html
+      - name: Meson setup
+        run: |
+          meson setup build \
+            -Dbuildtype=debug \
+            -Dunit_tests=disabled \
+            -Duse_alsa=false \
+            -Duse_opengl=false \
+            -Duse_zlib_ng=false
+
+      - name: Build and run scan-build
+        run: |
+          ninja -C build scan-build
+          mv build/meson-logs/scanbuild report
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-analysis-report
+          path: report
+
+      - name: Summarize report
+        run: |
+          # Verhindert Fehler, falls kein HTML-Report gefunden wurde
+          if [ -d report ]; then
+            ./scripts/count-clang-bugs.py report/*/index.html
+          else
+            echo "No bugs found or report missing."
+          fi
 
