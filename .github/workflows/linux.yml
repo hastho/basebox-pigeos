@@ -116,8 +116,7 @@ jobs:
         run:  ./scripts/log-env.sh
 
       - name: Meson setup
-        run:  meson setup ${{ matrix.conf.build_flags }} build \
-          || ( cat build/meson-logs/meson-log.txt ; exit 1 )
+        run:  meson setup ${{ matrix.conf.build_flags }} build || ( cat build/meson-logs/meson-log.txt ; exit 1 )
 
       - name: Build
         run:  meson compile -C build |& tee build.log
