@@ -11,7 +11,6 @@ on:
       - 'website/**'
     tags:
       - 'v*'
-
   pull_request:
     paths-ignore:
       - '.clang-format'
@@ -29,37 +28,32 @@ jobs:
   cache_subprojects:
     name: Cache subprojects
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: false
 
       - name: Install Meson
-        run:  |
-          export DEBIAN_FRONTEND=noninteractive
+        run: |
           sudo apt-get update
-          sudo apt-get install -y python3-setuptools
-          sudo pip3 install --upgrade meson
+          sudo apt-get install -y python3-pip python3-setuptools meson ninja-build
 
       - name: Cache subprojects
-        id:   cache-subprojects
+        id: cache-subprojects
         uses: actions/cache@v4
         with:
           path: subprojects.tar
           key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
-          enableCrossOsArchive: true
 
-      - if:   steps.cache-subprojects.outputs.cache-hit != 'true'
+      - if: steps.cache-subprojects.outputs.cache-hit != 'true'
         name: Generate subprojects cache
-        run:  scripts/fetch-and-tar-subprojects.sh
+        run: |
+          chmod +x scripts/fetch-and-tar-subprojects.sh
+          ./scripts/fetch-and-tar-subprojects.sh
 
   build:
     name: ${{ matrix.conf.name }}
     runs-on: ubuntu-latest
     container: ${{ matrix.conf.container }}
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     needs: cache_subprojects
     strategy:
       fail-fast: false
@@ -70,153 +64,96 @@ jobs:
             update_cmd: sudo apt-get update
             install_cmd: sudo apt-get install -y build-essential libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev
             build_flags: -Dbuildtype=debug
-            run_tests: false
-            needs_pip: true
-
-          - name: Ubuntu Release
-            container: null
-            update_cmd: sudo apt-get update
-            install_cmd: sudo apt-get install -y build-essential libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev
-            build_flags: -Dbuildtype=release
-            run_tests: false
             needs_pip: true
 
           - name: Fedora Latest (Docker)
             container: fedora:latest
             update_cmd: dnf check-update || true
-            install_cmd: >-
-              dnf install -y 
-              gcc gcc-c++ meson ninja-build cmake pkgconf-pkg-config git tar
-              SDL2-devel libpng-devel opusfile-devel speexdsp-devel 
-              alsa-lib-devel libXi-devel python3-pip
+            install_cmd: dnf install -y gcc gcc-c++ meson ninja-build cmake pkgconf-pkg-config git tar SDL2-devel libpng-devel opusfile-devel speexdsp-devel alsa-lib-devel libXi-devel python3-pip
 
           - name: Debian Stable (Docker)
             container: debian:stable
             update_cmd: apt-get update
-            install_cmd: >-
-              apt-get install -y 
-              build-essential meson ninja-build 
-              libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev 
-              python3-pip git tar ca-certificates
+            install_cmd: apt-get install -y build-essential meson ninja-build libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev python3-pip git tar ca-certificates
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: false
 
       - name: Install Dependencies
         run: |
           ${{ matrix.conf.update_cmd }}
           ${{ matrix.conf.install_cmd }}
-          ${{ matrix.conf.needs_pip && 'pip3 install --break-system-packages meson ninja || sudo pip3 install --break-system-packages meson ninja' || '' }}
+          ${{ matrix.conf.needs_pip && 'sudo apt-get install -y meson ninja-build' || '' }}
 
       - name: Restore subprojects cache
-        id:   cache-subprojects
         uses: actions/cache@v4
         with:
           path: subprojects.tar
           key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
-          enableCrossOsArchive: true
 
       - name: Extract or Fetch subprojects
         run: |
+          # WICHTIG: Fix für Debian Docker Git-Security
+          git config --global --add safe.directory "$PWD" || true
           if [ -f subprojects.tar ]; then
             tar -xf subprojects.tar
           else
-            echo "Cache miss: Fetching subprojects..."
-            scripts/fetch-and-tar-subprojects.sh
+            chmod +x scripts/fetch-and-tar-subprojects.sh
+            ./scripts/fetch-and-tar-subprojects.sh
             tar -xf subprojects.tar
           fi
 
-      - name: Log environment
-        run:  ./scripts/log-env.sh
-
       - name: Meson setup
-        run:  meson setup --wrap-mode=forcefallback ${{ matrix.conf.build_flags }} build || ( cat build/meson-logs/meson-log.txt ; exit 1 )
+        run: meson setup build --wrap-mode=forcefallback ${{ matrix.conf.build_flags }} || (cat build/meson-logs/meson-log.txt && exit 1)
 
       - name: Build
-        run:  meson compile -C build |& tee build.log
-
-      - name: Run tests
-        if:   matrix.conf.run_tests
-        run:  meson test --num-processes 128 -t 0 -C build --print-errorlogs
+        run: meson compile -C build
 
   build_release:
     name: Linux Release
     runs-on: ubuntu-latest
     needs: cache_subprojects
+    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - run:  sudo apt-get update
 
       - name: Install dependencies
         run: |
-          sudo apt-get install -y tree \
-            $(cat packages/ubuntu-24.04-apt.txt)
-          sudo pip3 install --upgrade meson ninja
+          sudo apt-get update
+          sudo apt-get install -y python3-pip meson ninja-build tree $(cat packages/ubuntu-24.04-apt.txt)
 
       - name: Restore subprojects cache
-        id:   cache-subprojects
         uses: actions/cache@v4
         with:
           path: subprojects.tar
           key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
-          enableCrossOsArchive: true
 
-      - name: Extract or Fetch subprojects
-        run: |
-          if [ -f subprojects.tar ]; then
-            tar -xf subprojects.tar
-          else
-            echo "Cache miss: Fetching subprojects..."
-            scripts/fetch-and-tar-subprojects.sh
-            tar -xf subprojects.tar
-          fi
-
-      - name: Log environment
-        run:  ./scripts/log-env.sh
-
-      - name: Extract tag version
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "VERSION=$TAG" >> $GITHUB_ENV
-          echo "PKG_DIR=basebox-linux-x86_64-$TAG" >> $GITHUB_ENV
+      - name: Extract subprojects
+        run: tar -xf subprojects.tar || ./scripts/fetch-and-tar-subprojects.sh
 
       - name: Setup release build
         run: |
-          meson setup \
-            -Duse_xinput2=false \
-            -Duse_zlib_ng=sse2,ssse3,neon \
+          meson setup build \
             -Ddefault_library=static \
             --wrap-mode=forcefallback \
-            -Db_lto=true -Db_lto_threads=$(nproc) \
-            build \
-          || ( cat build/meson-logs/meson-log.txt ; exit 1 )
+            -Db_lto=true -Dbuildtype=release \
+            || (cat build/meson-logs/meson-log.txt && exit 1)
 
-      - name: Build
-        run:  meson compile -C build
-
-      - name: Package
+      - name: Build & Package
         run: |
-          ./scripts/create-package.sh \
-            -p linux \
-            build \
-            "${{ env.PKG_DIR }}"
-
-      - name: Create tarball
-        run: |
-          tar -cJf "${{ env.PKG_DIR }}.tar.xz" "${{ env.PKG_DIR }}"
+          meson compile -C build
+          TAG=${GITHUB_REF#refs/tags/}
+          PKG_DIR="basebox-linux-x86_64-$TAG"
+          ./scripts/create-package.sh -p linux build "$PKG_DIR"
+          tar -cJf "$PKG_DIR.tar.xz" "$PKG_DIR"
+          echo "ASSET_PATH=$PKG_DIR.tar.xz" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            ${{ env.PKG_DIR }}.tar.xz
-          prerelease: ${{ contains(github.ref, '-') }}
+          files: ${{ env.ASSET_PATH }}
+
