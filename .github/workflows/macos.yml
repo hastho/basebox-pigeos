@@ -1,75 +1,75 @@
-  build_macos_universal:
-    name: macOS Universal Release
-    runs-on: macos-14
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+build_macos_universal:
+  name: macOS Universal Release
+  runs-on: macos-14
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          brew update
-          brew install meson ninja sdl2 libpng opusfile speexdsp ccache
+    - name: Install Dependencies
+      run: |
+        brew update
+        brew install meson ninja sdl2 libpng opusfile speexdsp ccache
 
-      - name: Restore subprojects cache
-        uses: actions/cache@v4
-        with:
-          path: subprojects.tar
-          key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
+    - name: Restore subprojects cache
+      uses: actions/cache@v4
+      with:
+        path: subprojects.tar
+        key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
 
-      - name: Extract subprojects
-        run: |
-          if [ -f subprojects.tar ]; then
-            tar -xf subprojects.tar
-          else
-            chmod +x scripts/fetch-and-tar-subprojects.sh
-            ./scripts/fetch-and-tar-subprojects.sh
-            tar -xf subprojects.tar
-          fi
+    - name: Extract subprojects
+      run: |
+        if [ -f subprojects.tar ]; then
+          tar -xf subprojects.tar
+        else
+          chmod +x scripts/fetch-and-tar-subprojects.sh
+          ./scripts/fetch-and-tar-subprojects.sh
+          tar -xf subprojects.tar
+        fi
 
-      - name: Build x86_64 (Intel)
-        run: |
-          # Wir zwingen Meson via Compiler-Flags auf x86_64
-          meson setup build_x86 \
-            -Dbuildtype=release \
-            -Dstrip=true \
-            -Dc_args="-arch x86_64" \
-            -Dcpp_args="-arch x86_64" \
-            -Dc_link_args="-arch x86_64" \
-            -Dcpp_link_args="-arch x86_64"
-          meson compile -C build_x86
+    - name: Build x86_64 (Intel)
+      run: |
+        # Wir zwingen Meson via Compiler-Flags auf x86_64
+        meson setup build_x86 \
+          -Dbuildtype=release \
+          -Dstrip=true \
+          -Dc_args="-arch x86_64" \
+          -Dcpp_args="-arch x86_64" \
+          -Dc_link_args="-arch x86_64" \
+          -Dcpp_link_args="-arch x86_64"
+        meson compile -C build_x86
 
-      - name: Build arm64 (Apple Silicon)
-        run: |
-          # Natives Compiling (Standard auf macos-14)
-          meson setup build_arm \
-            -Dbuildtype=release \
-            -Dstrip=true
-          meson compile -C build_arm
+    - name: Build arm64 (Apple Silicon)
+      run: |
+        # Natives Compiling (Standard auf macos-14)
+        meson setup build_arm \
+          -Dbuildtype=release \
+          -Dstrip=true
+        meson compile -C build_arm
 
-      - name: Create Universal App Bundle
-        run: |
-          APP_NAME="DosBoxStaging"
-          mkdir -p "${APP_NAME}.app/Contents/MacOS"
-          
-          # Zusammenführung der Binaries
-          lipo -create \
-            build_x86/${APP_NAME} \
-            build_arm/${APP_NAME} \
-            -output "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
-          
-          # Verifiziere das Ergebnis im Log
-          file "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+    - name: Create Universal App Bundle
+      run: |
+        APP_NAME="DosBoxStaging"
+        mkdir -p "${APP_NAME}.app/Contents/MacOS"
+        
+        # Zusammenführung der Binaries
+        lipo -create \
+          build_x86/${APP_NAME} \
+          build_arm/${APP_NAME} \
+          -output "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+        
+        # Verifiziere das Ergebnis im Log
+        file "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
 
-      - name: Create DMG
-        run: |
-          hdiutil create -volname "DosBox Staging" \
-                         -srcfolder "${APP_NAME}.app" \
-                         -ov -format UDZO \
-                         "${APP_NAME}_Universal.dmg"
+    - name: Create DMG
+      run: |
+        hdiutil create -volname "DosBox Staging" \
+                       -srcfolder "${APP_NAME}.app" \
+                       -ov -format UDZO \
+                       "${APP_NAME}_Universal.dmg"
 
-      - name: Upload DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: macOS-Universal-DMG
-          path: "*.dmg"
+    - name: Upload DMG
+      uses: actions/upload-artifact@v4
+      with:
+        name: macOS-Universal-DMG
+        path: "*.dmg"
 
