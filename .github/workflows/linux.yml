@@ -68,25 +68,26 @@ jobs:
           - name: Ubuntu Latest
             container: null
             update_cmd: sudo apt-get update
-            install_cmd: sudo apt-get install -y build-essential meson ninja libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev libasound2-dev libpulseAudio-dev libsamplerate0-dev libxkbcommon-dev libdecor-0-dev libgbm-dev libwayland-dev wayland-protocols libdrm-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libopengl-dev libvulkan-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev libswresample-dev libfluidsynth-dev libmt32emu-dev libslirp-dev
+            install_cmd: sudo apt-get install -y build-essential libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev
             build_flags: -Dbuildtype=debug
             run_tests: true
+            needs_pip: true
 
           - name: Debian Stable
             container: debian:stable-slim
             update_cmd: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl
-            install_cmd: apt-get install -y build-essential meson ninja libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev libasound2-dev libpulseaudio-dev libsamplerate0-dev libxkbcommon0 libdecor-0 libgbm1 libwayland-1.0 wayland-protocols libdrm2 libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libopengl-dev libvulkan-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev swresample-dev libfluidsynth-dev libmt32emu-dev libslirp4 python3-pip
+            install_cmd: apt-get install -y build-essential libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev python3-pip
             build_flags: -Dbuildtype=debug
             run_tests: true
-            pip_cmd: pip3 install --break-system-packages
+            needs_pip: true
 
           - name: Fedora Latest
             container: fedora:latest
             update_cmd: dnf check-update || true
-            install_cmd: dnf install -y gcc gcc-c++ meson ninja SDL2-devel libpng-devel opusfile-devel speexdsp-devel alsa-lib-devel pulseaudio-libs-devel libsamplerate-devel libxkbcommon decor-devel gbm-devel wayland-protocols libdrm-devel libX11-devel libXcursor-devel libXi-devel libXrandr-devel libXss-devel libglvnd-devel vulkan-loader-devel ffmpeg-devel fluidsynth-devel mt32emu-devel libslirp-devel python3-pip
+            install_cmd: dnf install -y gcc gcc-c++ SDL2-devel libpng-devel opusfile-devel speexdsp-devel python3-pip
             build_flags: -Dbuildtype=debug
             run_tests: true
-            pip_cmd: pip3 install
+            needs_pip: true
 
     steps:
       - name: Checkout repository
@@ -98,7 +99,7 @@ jobs:
         run: |
           ${{ matrix.conf.update_cmd }}
           ${{ matrix.conf.install_cmd }}
-          ${{ matrix.conf.pip_cmd || 'pip3 install' }} meson ninja
+          ${{ matrix.conf.needs_pip && 'pip3 install meson ninja' || '' }}
 
       - name: Restore subprojects cache
         id:   cache-subprojects
