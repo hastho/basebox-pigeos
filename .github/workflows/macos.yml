@@ -48,7 +48,8 @@ jobs:
             -Dc_args="-arch x86_64" \
             -Dcpp_args="-arch x86_64" \
             -Dc_link_args="-arch x86_64" \
-            -Dcpp_link_args="-arch x86_64"
+            -Dcpp_link_args="-arch x86_64" \
+            -Dspeexdsp:neon=disabled
           meson compile -C build_x86
 
       - name: Build arm64 (Apple Silicon)
