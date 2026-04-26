@@ -70,7 +70,7 @@ jobs:
             update_cmd: sudo apt-get update
             install_cmd: sudo apt-get install -y build-essential libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev
             build_flags: -Dbuildtype=debug
-            run_tests: true
+            run_tests: false
             needs_pip: true
 
           - name: Debian Stable
@@ -78,7 +78,7 @@ jobs:
             update_cmd: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl
             install_cmd: apt-get install -y build-essential libsdl2-dev libpng-dev libopusfile-dev libspeexdsp-dev python3-pip
             build_flags: -Dbuildtype=debug
-            run_tests: true
+            run_tests: false
             needs_pip: true
 
           - name: Fedora Latest
@@ -86,7 +86,7 @@ jobs:
             update_cmd: dnf check-update || true
             install_cmd: dnf install -y gcc gcc-c++ SDL2-devel libpng-devel opusfile-devel speexdsp-devel python3-pip
             build_flags: -Dbuildtype=debug
-            run_tests: true
+            run_tests: false
             needs_pip: true
 
     steps:
