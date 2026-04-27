@@ -293,6 +293,7 @@ jobs:
         shell: bash
         run: |
           set -x
+          TAG="${{ steps.set_vars.outputs.tag }}"
           PACKAGE_INFO="release ${TAG}"
 
           mkdir -p out/program
