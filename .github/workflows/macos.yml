@@ -5,99 +5,77 @@ on:
     branches: [ main, master ]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ main, master ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build_macos_universal:
-    name: macOS Universal (Intel + Apple Silicon)
+  build_x86:
+    name: macOS Intel (x86_64)
+    runs-on: macos-13  # Native Intel Runner
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Deps
+        run: brew install meson ninja sdl2 libpng opusfile speexdsp
+      - name: Build
+        run: |
+          meson setup build -Dbuildtype=release -Dstrip=true
+          meson compile -C build
+      - name: Upload Intel Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-x86
+          path: build/dosbox
+
+  build_arm:
+    name: macOS ARM (arm64)
+    runs-on: macos-14  # Native Apple Silicon Runner
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Deps
+        run: brew install meson ninja sdl2 libpng opusfile speexdsp
+      - name: Build
+        run: |
+          meson setup build -Dbuildtype=release -Dstrip=true
+          meson compile -C build
+      - name: Upload ARM Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-arm
+          path: build/dosbox
+
+  create_universal:
+    name: Create Universal DMG
+    needs: [build_x86, build_arm]
     runs-on: macos-14
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          brew update
-          brew install meson ninja sdl2 libpng opusfile speexdsp ccache
-
-      - name: Restore subprojects cache
-        uses: actions/cache@v4
+      - name: Download Intel
+        uses: actions/download-artifact@v4
         with:
-          path: subprojects.tar
-          key: subprojects-${{ hashFiles('subprojects/*.wrap') }}-1
-
-      - name: Extract or Fetch subprojects
+          name: binary-x86
+          path: bin_x86
+      - name: Download ARM
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-arm
+          path: bin_arm
+      - name: Create Bundle and DMG
         run: |
-          if [ -f subprojects.tar ]; then
-            tar -xf subprojects.tar
-          else
-            chmod +x scripts/fetch-and-tar-subprojects.sh
-            ./scripts/fetch-and-tar-subprojects.sh
-            tar -xf subprojects.tar
-          fi
-
-      - name: Build x86_64 (Intel)
-        run: |
-          cat <<EOF > macos_x86_64.ini
-          [binaries]
-          c = 'cc'
-          cpp = 'c++'
-          ar = 'ar'
-          strip = 'strip'
-          [built-in options]
-          c_args = ['-arch', 'x86_64', '-mmacosx-version-min=11.0']
-          cpp_args = ['-arch', 'x86_64', '-mmacosx-version-min=11.0']
-          c_link_args = ['-arch', 'x86_64']
-          cpp_link_args = ['-arch', 'x86_64']
-          [properties]
-          needs_exe_wrapper = true
-          [host_machine]
-          system = 'darwin'
-          cpu_family = 'x86_64'
-          cpu = 'x86_64'
-          endian = 'little'
-          EOF
-          meson setup build_x86 \
-            --cross-file macos_x86_64.ini \
-            --wrap-mode=forcefallback \
-            -Dbuildtype=release \
-            -Dstrip=true \
-            -Dautovec_info=false \
-            -Dspeexdsp:neon=disabled
-          meson compile -C build_x86
-
-      - name: Build arm64 (Apple Silicon)
-        run: |
-          meson setup build_arm \
-            -Dbuildtype=release \
-            -Dstrip=true \
-            -Dautovec_info=false
-          meson compile -C build_arm
-
-      - name: Create Universal App Bundle
-        run: |
-          BINARY_NAME="dosbox" 
-          APP_NAME="DosBoxStaging"
-          mkdir -p "${APP_NAME}.app/Contents/MacOS"
-          lipo -create \
-            build_x86/${BINARY_NAME} \
-            build_arm/${BINARY_NAME} \
-            -output "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+          BINARY="dosbox" # Adjust to your actual binary name
+          APP="BaseBox.app"
+          mkdir -p "$APP/Contents/MacOS"
           
-          file "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
-
-      - name: Create DMG
-        run: |
-          hdiutil create -volname "DosBox Staging" \
-                         -srcfolder "DosBoxStaging.app" \
-                         -ov -format UDZO \
-                         DosBoxStaging_Universal.dmg
-
-      - name: Upload DMG
+          # Merge both native builds into one Universal Binary
+          lipo -create bin_x86/$BINARY bin_arm/$BINARY -output "$APP/Contents/MacOS/$BINARY"
+          
+          # Verify architecture
+          file "$APP/Contents/MacOS/$BINARY"
+          
+          # Build the DMG
+          hdiutil create -volname "BaseBox" -srcfolder "$APP" -ov -format UDZO BaseBox_Universal.dmg
+          
+      - name: Upload Universal DMG
         uses: actions/upload-artifact@v4
         with:
           name: macOS-Universal-DMG
