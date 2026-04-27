@@ -1,7 +1,7 @@
 #define DOSBoxAppName "BaseBox Pi/GEOS"
 #define DOSBoxAppDirName "BaseBox"
 #define DOSBoxAppVersion "DOSBOX-STAGING-VERSION"
-#define DOSBoxAppInternal "basebox-pigeos"
+#define DOSBoxAppInternal "dosbox-staging"
 #define DOSBoxAppURL "https://www.thobipix.de/"
 #define DOSBoxAppExeName "dosbox.exe"
 #define DOSBoxAppExeDebuggerName "dosbox_with_debugger.exe"

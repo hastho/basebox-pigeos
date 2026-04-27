@@ -1184,18 +1184,23 @@ pbool = secprop->Add_bool("shell_config_shortcuts", when_idle, true);
 	        "Temporary working directory for print spool files\n"
 	        "(default is current directory).");
 
-	for (int i = 0; i < 4; i++) {
-		char lpt_name[5] = {};
-		snprintf(lpt_name, sizeof(lpt_name), "lpt%d", i + 1);
-		pstring = secprop->Add_string(lpt_name, only_at_start, "disabled");
-		pstring->Set_help(
-		        "Printer output command for LPT" + std::to_string(i + 1) + ":\n"
-		        "  disabled: Discard print output.\n"
-		        "  <command>: Execute command with spool file as argument.\n"
-		        "            Use %s for spool filename.\n"
-		        "Examples: 'lp %%s' (Linux/CUPS), 'lpr %%s' (macOS),\n"
-		        "          'notepad /p %%s' (Windows).");
-	}
+	pstring = secprop->Add_string("lpt1", only_at_start, "disabled");
+	pstring->Set_help(
+	        "Printer output command for LPT1:\n"
+	        "  disabled: Discard print output.\n"
+	        "  <command>: Execute command with spool file as argument.\n"
+	        "            Use %%s for spool filename.\n"
+	        "Examples: 'lp %%s' (Linux/CUPS), 'lpr %%s' (macOS),\n"
+	        "          'notepad /p %%s' (Windows).");
+
+	pstring = secprop->Add_string("lpt2", only_at_start, "disabled");
+	pstring->Set_help("See 'lpt1' ('disabled' by default).");
+
+	pstring = secprop->Add_string("lpt3", only_at_start, "disabled");
+	pstring->Set_help("See 'lpt1' ('disabled' by default).");
+
+	pstring = secprop->Add_string("lpt4", only_at_start, "disabled");
+	pstring->Set_help("See 'lpt1' ('disabled' by default).");
 
 	// All the general DOS Related stuff, on real machines mostly located in
 	// CONFIG.SYS
