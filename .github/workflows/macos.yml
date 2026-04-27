@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build_macos_universal:
-    name: macOS Universal Release
+    name: macOS Universal (Intel + Apple Silicon)
     runs-on: macos-14
     steps:
       - name: Checkout repository
@@ -46,20 +46,15 @@ jobs:
           [binaries]
           c = 'cc'
           cpp = 'c++'
-          objc = 'cc'
-          objcpp = 'c++'
           ar = 'ar'
           strip = 'strip'
-
           [built-in options]
           c_args = ['-arch', 'x86_64', '-mmacosx-version-min=11.0']
           cpp_args = ['-arch', 'x86_64', '-mmacosx-version-min=11.0']
           c_link_args = ['-arch', 'x86_64']
           cpp_link_args = ['-arch', 'x86_64']
-
           [properties]
           needs_exe_wrapper = true
-
           [host_machine]
           system = 'darwin'
           cpu_family = 'x86_64'
@@ -79,15 +74,15 @@ jobs:
         run: |
           meson setup build_arm \
             -Dbuildtype=release \
-            -Dstrip=true
+            -Dstrip=true \
+            -Dautovec_info=false
           meson compile -C build_arm
 
       - name: Create Universal App Bundle
         run: |
           BINARY_NAME="dosbox" 
-          APP_NAME="BaseBox"
+          APP_NAME="DosBoxStaging"
           mkdir -p "${APP_NAME}.app/Contents/MacOS"
-          
           lipo -create \
             build_x86/${BINARY_NAME} \
             build_arm/${BINARY_NAME} \
@@ -97,10 +92,10 @@ jobs:
 
       - name: Create DMG
         run: |
-          hdiutil create -volname "BaseBox" \
-                         -srcfolder "BaseBox.app" \
+          hdiutil create -volname "DosBox Staging" \
+                         -srcfolder "DosBoxStaging.app" \
                          -ov -format UDZO \
-                         BaseBox_Universal.dmg
+                         DosBoxStaging_Universal.dmg
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
