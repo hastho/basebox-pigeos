@@ -81,3 +81,10 @@ jobs:
           name: macOS-Universal-DMG
           path: "*.dmg"
 
+      - name: Release DMG
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: BaseBox_Universal.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
