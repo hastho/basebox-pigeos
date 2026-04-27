@@ -1,15 +1,15 @@
-#define DOSBoxAppName "DOSBox Staging"
-#define DOSBoxAppDirName "DOSBox Staging"
+#define DOSBoxAppName "BaseBox Pi/GEOS"
+#define DOSBoxAppDirName "BaseBox"
 #define DOSBoxAppVersion "DOSBOX-STAGING-VERSION"
-#define DOSBoxAppInternal "dosbox-staging"
-#define DOSBoxAppURL "https://www.dosbox-staging.org/"
+#define DOSBoxAppInternal "basebox-pigeos"
+#define DOSBoxAppURL "https://www.thobipix.de/"
 #define DOSBoxAppExeName "dosbox.exe"
 #define DOSBoxAppExeDebuggerName "dosbox_with_debugger.exe"
 #define DOSBoxAppExeConsoleName "dosbox_with_console.bat"
 #define DOSBoxAppBuildDate GetDateTimeString('yyyymmdd_hhnnss', '', '')
 
 [Setup]
-AppId={{587471B7-02F6-4F25-8D00-70006790653C}
+AppId={{587471B7-02F6-4F25-8D00-70006790654D}
 AppName={#DOSBoxAppName}
 AppVersion={#DOSBoxAppVersion}
 AppVerName={#DOSBoxAppName} {#DOSBoxAppVersion}
