@@ -189,7 +189,12 @@ jobs:
         shell: pwsh
         run: |
           cd vs
-          MSBuild -m dosbox.sln -t:dosbox:Rebuild -p:Configuration=Release -p:Platform=${{ matrix.arch }}
+          # Map 'ARM64' to the vcpkg 'arm64-windows' triplet explicitly if needed
+          $env:VCPKG_TARGET_TRIPLET = if ("${{ matrix.arch }}" -eq "ARM64") { "arm64-windows" } else { "x64-windows" }
+          MSBuild -m dosbox.sln -t:dosbox:Rebuild `
+            -p:Configuration=Release `
+            -p:Platform=${{ matrix.arch }} `
+            -p:VcpkgEnableManifest=true
 
       - name: Print VCPKG error log
         if: failure()
