@@ -11,7 +11,7 @@ set -e
 DEST_PATH="$HOME/.local/share"
 REMOVE=false
 USAGE=false
-DESKTOP_FILE="org.basebox-pigeos.basebox-pigeos.desktop"
+DESKTOP_FILE="org.dosbox-staging.dosbox-staging.desktop"
 
 strstr() {
     [ "${1#*$2*}" = "$1" ] && return 1
@@ -33,10 +33,10 @@ install_icons() {
 }
 
 remove_icons() {
-    find $DEST_PATH/icons -name *basebox-pigeos* -delete
+    find $DEST_PATH/icons -name *dosbox-staging* -delete
     rm $DEST_PATH/applications/$DESKTOP_FILE
     ## Also remove legacy files, if present
-    rm $DEST_PATH/applications/basebox-pigeos.desktop
+    rm $DEST_PATH/applications/dosbox-staging.desktop
 }
 
 for arg in $@
