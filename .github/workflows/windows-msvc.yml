@@ -115,7 +115,7 @@ jobs:
     runs-on: windows-2022
     strategy:
       matrix:
-        arch: [x64, ARM64]
+        arch: [x64]
         debugger: [false, true]
 
     steps:
@@ -189,12 +189,7 @@ jobs:
         shell: pwsh
         run: |
           cd vs
-          # Map 'ARM64' to the vcpkg 'arm64-windows' triplet explicitly if needed
-          $env:VCPKG_TARGET_TRIPLET = if ("${{ matrix.arch }}" -eq "ARM64") { "arm64-windows" } else { "x64-windows" }
-          MSBuild -m dosbox.sln -t:dosbox:Rebuild `
-            -p:Configuration=Release `
-            -p:Platform=${{ matrix.arch }} `
-            -p:VcpkgEnableManifest=true
+          MSBuild -m dosbox.sln -t:dosbox:Rebuild -p:Configuration=Release -p:Platform=${{ matrix.arch }}
 
       - name: Print VCPKG error log
         if: failure()
@@ -259,7 +254,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [x64, ARM64]
+        arch: [x64]
     steps:
       - name: Merge artifacts (${{ matrix.arch }})
         uses: actions/upload-artifact/merge@v4
