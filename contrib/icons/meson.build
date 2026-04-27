@@ -27,7 +27,7 @@ endforeach
 # scalable vector icon
 #
 install_data(
-    'svg' / 'dosbox-staging.svg',
+    'svg' / 'basebox-pigeos.svg',
     rename: 'org.dosbox-staging.dosbox-staging.svg',
     install_dir: icons_hicolor / 'scalable' / 'apps',
 )
