@@ -293,7 +293,6 @@ jobs:
         shell: bash
         run: |
           set -x
-          TAG=${{ needs.merge_windows_artifacts.outputs.tag }}
           PACKAGE_INFO="release ${TAG}"
 
           mkdir -p out/program
@@ -306,7 +305,7 @@ jobs:
           cp contrib/icons/windows/dosbox-staging.bmp      out
           cp contrib/icons/windows/dosbox-staging-side.bmp out
 
-          mv artifacts/basebox-windows-x64-${TAG}/* out/program
+          mv artifacts/basebox-windows-x64-${{ steps.set_vars.outputs.tag }}/* out/program
           mv out/program/dosbox*.exe                       out
 
       - name: Build Windows installer
@@ -321,5 +320,5 @@ jobs:
         with:
           files: |
             out/${{ steps.set_vars.outputs.pkg_dir }}-setup.exe
-            artifacts/basebox-windows-x64-${{ needs.merge_windows_artifacts.outputs.tag }}-without-debugger/*.zip
+            artifacts/basebox-windows-x64-${{ steps.set_vars.outputs.tag }}-without-debugger/*.zip
           prerelease: ${{ contains(github.ref, '-') }}
