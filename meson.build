@@ -139,6 +139,20 @@ extra_link_flags = [
     '-Wl,--Map,dosbox.map',
 ]
 
+# Add -lxcb for static X11 linking on modern Linux (e.g., Ubuntu 24.04)
+if host_machine.system() == 'linux'
+    xcb_dep = dependency('xcb', required: false)
+    xrender_dep = dependency('xrender', required: false)
+    if prefers_static_libs
+        if xcb_dep.found()
+            extra_link_flags += '-lxcb'
+        endif
+        if xrender_dep.found()
+            extra_link_flags += '-lXrender'
+        endif
+    endif
+endif
+
 # If the compiler provides std::filesystem, then we consider it modern enough
 # that we can trust it's extra helpful warnings to let us improve the code quality.
 if cxx.has_header('filesystem')
