@@ -5,8 +5,8 @@ PNG_DIR = png
 WINDOWS_DIR = windows
 
 MACOS_DIR = macos
-MACOS_ICON_1024 = $(MACOS_DIR)/dosbox-staging-1024.png
-MACOS_ICONSET_DIR = $(MACOS_DIR)/dosbox-staging.iconset
+MACOS_ICON_1024 = $(MACOS_DIR)/basebox-pigeos-1024.png
+MACOS_ICONSET_DIR = $(MACOS_DIR)/basebox-pigeos.iconset
 
 help:
 	@echo "Re-generate icons in platform specific formats, or install icons on Linux."
@@ -32,20 +32,20 @@ all: png windows macos
 #  Needs rsvg-convert from the librsvg package.
 #
 png:
-	rsvg-convert -h  16 svg/dosbox-staging-16.svg > $(PNG_DIR)/icon_16.png
-	rsvg-convert -h  24 svg/dosbox-staging-24.svg > $(PNG_DIR)/icon_24.png
-	rsvg-convert -h  32 svg/dosbox-staging-32.svg > $(PNG_DIR)/icon_32.png
+	rsvg-convert -h  16 svg/basebox-pigeos-16.svg > $(PNG_DIR)/icon_16.png
+	rsvg-convert -h  24 svg/basebox-pigeos-24.svg > $(PNG_DIR)/icon_24.png
+	rsvg-convert -h  32 svg/basebox-pigeos-32.svg > $(PNG_DIR)/icon_32.png
 
 	# Some desktop environments expect a 22x22 icon (e.g., KDE Plasma).
 	# Rendering this from the SVG optimised for 24x24px looks good enough.
-	rsvg-convert -h  22 svg/dosbox-staging-24.svg > $(PNG_DIR)/icon_22.png
+	rsvg-convert -h  22 svg/basebox-pigeos-24.svg > $(PNG_DIR)/icon_22.png
 
-	rsvg-convert -h   48 svg/dosbox-staging.svg   > $(PNG_DIR)/icon_48.png
-	rsvg-convert -h   96 svg/dosbox-staging.svg   > $(PNG_DIR)/icon_96.png
-	rsvg-convert -h  128 svg/dosbox-staging.svg   > $(PNG_DIR)/icon_128.png
-	rsvg-convert -h  256 svg/dosbox-staging.svg   > $(PNG_DIR)/icon_256.png
-	rsvg-convert -h  512 svg/dosbox-staging.svg   > $(PNG_DIR)/icon_512.png
-	rsvg-convert -h 1024 svg/dosbox-staging.svg   > $(PNG_DIR)/icon_1024.png
+	rsvg-convert -h   48 svg/basebox-pigeos.svg   > $(PNG_DIR)/icon_48.png
+	rsvg-convert -h   96 svg/basebox-pigeos.svg   > $(PNG_DIR)/icon_96.png
+	rsvg-convert -h  128 svg/basebox-pigeos.svg   > $(PNG_DIR)/icon_128.png
+	rsvg-convert -h  256 svg/basebox-pigeos.svg   > $(PNG_DIR)/icon_256.png
+	rsvg-convert -h  512 svg/basebox-pigeos.svg   > $(PNG_DIR)/icon_512.png
+	rsvg-convert -h 1024 svg/basebox-pigeos.svg   > $(PNG_DIR)/icon_1024.png
 
 ##
 #  Re-generate Window .ico file from the PNG icons.
@@ -59,7 +59,7 @@ windows:
 	           $(PNG_DIR)/icon_32.png \
 	           $(PNG_DIR)/icon_24.png \
 	           $(PNG_DIR)/icon_16.png \
-	        -o $(WINDOWS_DIR)/dosbox-staging.ico
+	        -o $(WINDOWS_DIR)/basebox-pigeos.ico
 
 ##
 #  Re-generate macOS .icns file from the 1024x1024 macOS source PNG.
@@ -110,17 +110,17 @@ install:
 	mkdir -m 0755 -p "$(DESTDIR)$(datadir)/icons/hicolor/1024x1024/apps/"
 	mkdir -m 0755 -p "$(DESTDIR)$(datadir)/icons/hicolor/scalable/apps"
 
-	install -p -m 0644 $(PNG_DIR)/icon_16.png "$(DESTDIR)$(datadir)/icons/hicolor/16x16/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_22.png "$(DESTDIR)$(datadir)/icons/hicolor/22x22/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_24.png "$(DESTDIR)$(datadir)/icons/hicolor/24x24/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_32.png "$(DESTDIR)$(datadir)/icons/hicolor/32x32/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_48.png "$(DESTDIR)$(datadir)/icons/hicolor/48x48/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_96.png "$(DESTDIR)$(datadir)/icons/hicolor/96x96/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_128.png "$(DESTDIR)$(datadir)/icons/hicolor/128x128/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_256.png "$(DESTDIR)$(datadir)/icons/hicolor/256x256/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_512.png "$(DESTDIR)$(datadir)/icons/hicolor/512x512/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 $(PNG_DIR)/icon_1024.png "$(DESTDIR)$(datadir)/icons/hicolor/1024x1024/apps/org.dosbox-staging.dosbox-staging.png"
-	install -p -m 0644 svg/dosbox-staging.svg "$(DESTDIR)$(datadir)/icons/hicolor/scalable/apps/org.dosbox-staging.dosbox-staging.svg"
+	install -p -m 0644 $(PNG_DIR)/icon_16.png "$(DESTDIR)$(datadir)/icons/hicolor/16x16/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_22.png "$(DESTDIR)$(datadir)/icons/hicolor/22x22/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_24.png "$(DESTDIR)$(datadir)/icons/hicolor/24x24/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_32.png "$(DESTDIR)$(datadir)/icons/hicolor/32x32/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_48.png "$(DESTDIR)$(datadir)/icons/hicolor/48x48/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_96.png "$(DESTDIR)$(datadir)/icons/hicolor/96x96/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_128.png "$(DESTDIR)$(datadir)/icons/hicolor/128x128/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_256.png "$(DESTDIR)$(datadir)/icons/hicolor/256x256/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_512.png "$(DESTDIR)$(datadir)/icons/hicolor/512x512/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 $(PNG_DIR)/icon_1024.png "$(DESTDIR)$(datadir)/icons/hicolor/1024x1024/apps/org.basebox-pigeos.basebox-pigeos.png"
+	install -p -m 0644 svg/basebox-pigeos.svg "$(DESTDIR)$(datadir)/icons/hicolor/scalable/apps/org.basebox-pigeos.basebox-pigeos.svg"
 
 clean:
 	rm -rf $(MACOS_ICONSET_DIR)
