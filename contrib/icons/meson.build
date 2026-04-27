@@ -19,7 +19,7 @@ png_files = {
 foreach name, size : png_files
     install_data(
         'png' / name,
-        rename: 'org.dosbox-staging.dosbox-staging.png',
+        rename: 'org.basebox-pigeos.basebox-pigeos.png',
         install_dir: icons_hicolor / size / 'apps',
     )
 endforeach
@@ -27,7 +27,7 @@ endforeach
 # scalable vector icon
 #
 install_data(
-    'svg' / 'dosbox-staging.svg',
-    rename: 'org.dosbox-staging.dosbox-staging.svg',
+    'svg' / 'basebox-pigeos.svg',
+    rename: 'org.basebox-pigeos.basebox-pigeos.svg',
     install_dir: icons_hicolor / 'scalable' / 'apps',
 )
