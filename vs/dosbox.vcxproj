@@ -1145,4 +1145,14 @@ IF %ERRORLEVEL% LSS 8 SET ERRORLEVEL = 0</Command>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='ARM64'">
+    <Link>
+      <!-- Remove fluidsynth.lib from the list for ARM64 -->
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <ClCompile>
+      <!-- Define a macro so your code knows FluidSynth is missing -->
+      <PreprocessorDefinitions>C_FLUIDSYNTH=0;DISABLE_FLUIDSYNTH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
 </Project>
