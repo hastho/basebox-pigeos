@@ -1167,14 +1167,25 @@ bool Config::WriteConfig(const std_fs::path& path) const
 					help.replace(pos, 1, prefix);
 				}
 
-				// Percentage signs are encoded as '%%' in the
-				// config descriptions because they are sent
-				// through printf-like functions (e.g.,
-				// WriteOut()). So we need to de-escape them before
-				// writing them into the config.
-				auto s = format_str(help);
+			// Percentage signs are encoded as '%%' in the
+			// config descriptions because they are sent
+			// through printf-like functions (e.g.,
+			// WriteOut()). So we need to de-escape them before
+			// writing them into the config.
+			//
+			// Simply replace %% with % without formatting. This avoids
+			// potential issues with help texts containing multiple %%s
+			// (which would become multiple %s format specifiers requiring
+			// multiple arguments).
+			std::string help_unescaped = help;
+			size_t unescape_pos = 0;
+			while ((unescape_pos = help_unescaped.find("%%", unescape_pos)) != std::string::npos) {
+				help_unescaped.replace(unescape_pos, 2, "%");
+			}
 
-				fprintf(outfile,
+			auto s = help_unescaped;
+
+			fprintf(outfile,
 				        "# %*s: %s",
 				        intmaxwidth,
 				        p->propname.c_str(),
