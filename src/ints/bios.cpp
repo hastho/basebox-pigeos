@@ -1416,6 +1416,31 @@ public:
 			ppindex++;
 		}
 
+		// If no parallel ports detected, check printer configuration
+		// to allow software-based printer redirection to be recognized
+		if (ppindex == 0) {
+			const Section_prop* printer_section = static_cast<const Section_prop*>(control->GetSection("printer"));
+			if (printer_section) {
+				const std::string lpt1 = printer_section->Get_string("LPT1");
+				const std::string lpt2 = printer_section->Get_string("LPT2");
+				const std::string lpt3 = printer_section->Get_string("LPT3");
+
+				if (!lpt1.empty() && lpt1 != "disabled") {
+					mem_writew(BIOS_ADDRESS_LPT1, 0x378);
+					ppindex++;
+				}
+				if (!lpt2.empty() && lpt2 != "disabled") {
+					mem_writew(BIOS_ADDRESS_LPT2, 0x278);
+					ppindex++;
+				}
+				if (!lpt3.empty() && lpt3 != "disabled") {
+					mem_writew(BIOS_ADDRESS_LPT3, 0x3bc);
+					ppindex++;
+				}
+			}
+		}
+
+
 		/* Setup equipment list */
 		// look http://www.bioscentral.com/misc/bda.htm
 		
