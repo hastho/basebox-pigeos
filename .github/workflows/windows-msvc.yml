@@ -320,6 +320,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            out/${{ steps.set_vars.outputs.pkg_dir }}-setup.exe
-            artifacts/basebox-windows-x64-${{ steps.set_vars.outputs.tag }}-without-debugger/*.zip
+            out/dosbox-staging-windows-x64-${{ steps.set_vars.outputs.tag }}-setup.exe
+            artifacts/dosbox-staging-windows-x64-${{ steps.set_vars.outputs.tag }}-without-debugger/*.zip
           prerelease: ${{ contains(github.ref, '-') }}
