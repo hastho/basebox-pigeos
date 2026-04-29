@@ -109,8 +109,6 @@ public:
 		for (int i = 0; i < MAX_PRINTER_DEVICES; i++) {
 			if (dev_lpt[i]) {
 				DOS_DelDevice(dev_lpt[i]);
-				delete dev_lpt[i];
-				dev_lpt[i] = nullptr;
 			}
 		}
 	}
