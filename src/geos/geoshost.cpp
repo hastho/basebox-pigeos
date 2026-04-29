@@ -12,18 +12,16 @@
 
 #include "../ints/int10.h"
 #include <SDL.h>
-
-#define USE_SDL3
+#include <SDL_net.h>
 
 #include <SDL3_net/SDL_net.h>
-#ifndef USE_SDL3
-#include <SDL_net.h>
-#endif
 
 #include "tlse.h"
 #include "tls_root_ca.h"
 
 #if C_GEOSHOST
+
+#define USE_SDL3
 
 #define MAX_ASYNC_OP_SLOTS	16
 
@@ -221,10 +219,9 @@ private:
 	enum State { IDLE, RESOLVING, CONNECTING, CONNECTED, DONE };
 
 private:
-	uint16_t m_socketHandle;
-#ifndef USE_SDL3
 	IPaddress m_ipAddr;
-#else
+	uint16_t m_socketHandle;
+#ifdef USE_SDL3
 	NET_Address* m_Addr;
 	Uint16 m_Port;
 	State m_State;
@@ -348,9 +345,9 @@ struct SocketState {
 	volatile bool used;
 	volatile bool open;
 	volatile bool blocking;
-#ifndef USE_SDL3
 	TCPsocket socket;
-#else
+	//NET_StreamSocket socketSet;
+#ifdef USE_SDL3
 	NET_StreamSocket* stream;
 #endif
 	char* recvBuf;
@@ -598,12 +595,11 @@ uint16_t AsyncSocketResolveAddr::Init(uint16_t* cmdRec)
 uint16_t 
 AsyncSocketConnect::Init(uint16_t* cmdRec) {
 
-#ifndef USE_SDL3
 	m_ipAddr.host = (((uint32_t)cmdRec[1]) << 16) | cmdRec[2];
 	m_ipAddr.port = ((cmdRec[3] & 0xFF) << 8) | ((cmdRec[3] >> 8) & 0xFF);
 
 	m_socketHandle = cmdRec[4];
-#else
+#ifdef USE_SDL3
 	m_RunOwnThread = false;
 	char hostname[20];
 	sprintf(hostname,
@@ -632,7 +628,6 @@ AsyncSocketConnect::RunAsync() {
 
 
 uint16_t AsyncSocketConnect::PollStatus() {
-#ifdef USE_SDL3
 
 	switch (m_State) {
 	case RESOLVING: 
@@ -674,9 +669,6 @@ uint16_t AsyncSocketConnect::PollStatus() {
 		break;
 	}
 	return 0;
-#else
-	return 0;
-#endif
 }
 
 
@@ -780,7 +772,6 @@ AsyncOp* AsyncOp::Cleanup()
 uint16_t
 AsyncSocketResolveAddr::RunAsync()
 {
-#ifndef USE_SDL3
 	LOG_INFO("NetResolveAddr %s", m_hostname);
 
 	IPaddress ipaddress;
@@ -798,9 +789,6 @@ AsyncSocketResolveAddr::RunAsync()
 	m_Result[0] = HIF_FAILED;
 
 	return 0;
-#else
-	return 0;
-#endif
 }
 
 #ifdef USE_SDL3
@@ -1163,12 +1151,12 @@ bool IsSegmentAccessible(uint16_t selector, bool isWrite = false)
 		return false;
 	}
 
-	// Real Mode oder VM86: keine Deskriptor-Prï¿½fung nï¿½tig
+	// Real Mode oder VM86: keine Deskriptor-Prüfung nötig
 	if (!cpu.pmode || (reg_flags & FLAG_VM)) {
 		return true;
 	}
 
-	// LDT-Selektor: prï¿½fen ob LDT ï¿½berhaupt geladen ist
+	// LDT-Selektor: prüfen ob LDT überhaupt geladen ist
 	if (selector & 4) {
 		if ((cpu.gdt.SLDT() & 0xFFFC) == 0) {
 			return false;
@@ -1180,7 +1168,7 @@ bool IsSegmentAccessible(uint16_t selector, bool isWrite = false)
 		return false;
 	}
 
-	// Present-Bit prï¿½fen
+	// Present-Bit prüfen
 	if (!desc.saved.seg.p) {
 		return false;
 	}
@@ -1192,7 +1180,7 @@ bool IsSegmentAccessible(uint16_t selector, bool isWrite = false)
 		return false;
 	}
 
-	// Typ-Prï¿½fung
+	// Typ-Prüfung
 	uint8_t type = desc.Type();
 	if (isWrite) {
 		// Muss beschreibbares Datensegment sein
