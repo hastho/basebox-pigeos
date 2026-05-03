@@ -50,11 +50,15 @@ jobs:
                 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
               fi
               eval "$(/usr/local/bin/brew shellenv)"
+              brew install python@3.14 || true
+              brew link --overwrite python@3.14
               brew install meson ninja sdl2 libpng opusfile speexdsp
               meson setup build-x86_64 -Dbuildtype=release -Dstrip=true
               meson compile -C build-x86_64
             '
           else
+            brew install python@3.14 || true
+            brew link --overwrite python@3.14
             brew install meson ninja sdl2 libpng opusfile speexdsp
             meson setup build-arm64 -Dbuildtype=release -Dstrip=true
             meson compile -C build-arm64
@@ -90,8 +94,12 @@ jobs:
       - name: Download per-arch binaries
         uses: actions/download-artifact@v8
 
-      - name: Install bundling tools
-        run: brew install dylibbundler librsvg
+      - name: Install brew dependencies
+        run: |
+          brew install dylibbundler
+          brew install python@3.14 || true
+          brew link --overwrite python@3.14
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --overwrite librsvg
 
       - name: Create universal binary
         run: |
