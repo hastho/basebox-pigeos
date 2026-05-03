@@ -24,13 +24,16 @@ concurrency:
 jobs:
   build_macos:
     name: Build (${{ matrix.conf.arch }})
-    runs-on: macos-15
+    runs-on: ${{ matrix.conf.host }}
+    timeout-minutes: 90
     strategy:
       matrix:
         conf:
-          - arch: x86_64
+          - host: macos-15-intel
+            arch: x86_64
             max_warnings: 0
-          - arch: arm64
+          - host: macos-15
+            arch: arm64
             max_warnings: 0
 
     steps:
@@ -39,30 +42,18 @@ jobs:
         with:
           submodules: false
 
-      - name: Build for ${{ matrix.conf.arch }}
+      - name: Install dependencies
+        run: |
+          brew install python@3.14 || true
+          brew link --overwrite python@3.14
+          brew install meson ninja glib gettext sdl2 libpng opusfile speexdsp
+
+      - name: Build with Meson
         run: |
           set -xo pipefail
-          if [[ "${{ matrix.conf.arch }}" == "x86_64" ]]; then
-            # Build x86_64 under Rosetta 2 on arm64 runner
-            arch -x86_64 bash -c '
-              set -xe
-              if [ ! -d /usr/local/Homebrew ]; then
-                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-              fi
-              eval "$(/usr/local/bin/brew shellenv)"
-              brew install python@3.14 || true
-              brew link --overwrite python@3.14
-              brew install meson ninja sdl2 libpng opusfile speexdsp
-              meson setup build-x86_64 -Dbuildtype=release -Dstrip=true
-              meson compile -C build-x86_64
-            '
-          else
-            brew install python@3.14 || true
-            brew link --overwrite python@3.14
-            brew install meson ninja sdl2 libpng opusfile speexdsp
-            meson setup build-arm64 -Dbuildtype=release -Dstrip=true
-            meson compile -C build-arm64
-          fi
+          BUILD_DIR="build-${{ matrix.conf.arch }}"
+          meson setup "$BUILD_DIR" -Dbuildtype=release -Dstrip=true
+          meson compile -C "$BUILD_DIR"
 
       - name: Upload per-arch binary
         uses: actions/upload-artifact@v7
