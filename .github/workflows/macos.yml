@@ -1,90 +1,187 @@
 name: macOS builds
+permissions: read-all
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
+    branches: [main, master]
+    tags: ["v*"]
+    paths-ignore:
+      - ".clang-format"
+      - "*.md"
+      - "docs/**"
+      - "licenses/**"
   pull_request:
+    paths-ignore:
+      - ".clang-format"
+      - "*.md"
+      - "docs/**"
+      - "licenses/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build_x86:
-    name: macOS Intel (x86_64)
-    runs-on: macos-15-intel  # Native Intel Runner
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Deps
-        run: brew install meson ninja sdl2 libpng opusfile speexdsp
-      - name: Build
-        run: |
-          meson setup build -Dbuildtype=release -Dstrip=true
-          meson compile -C build
-      - name: Upload Intel Binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-x86
-          path: build/dosbox
+  build_macos:
+    name: Build (${{ matrix.conf.arch }})
+    runs-on: macos-15
+    strategy:
+      matrix:
+        conf:
+          - arch: x86_64
+            max_warnings: 0
+          - arch: arm64
+            max_warnings: 0
 
-  build_arm:
-    name: macOS ARM (arm64)
-    runs-on: macos-14  # Native Apple Silicon Runner
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Deps
-        run: brew install meson ninja sdl2 libpng opusfile speexdsp
-      - name: Build
-        run: |
-          meson setup build -Dbuildtype=release -Dstrip=true
-          meson compile -C build
-      - name: Upload ARM Binary
-        uses: actions/upload-artifact@v4
+      - name: Check out repository
+        uses: actions/checkout@v6
         with:
-          name: binary-arm
-          path: build/dosbox
+          submodules: false
 
-  create_universal:
-    name: Create Universal DMG
-    needs: [build_x86, build_arm]
-    runs-on: macos-14
-    steps:
-      - name: Download Intel
-        uses: actions/download-artifact@v4
-        with:
-          name: binary-x86
-          path: bin_x86
-      - name: Download ARM
-        uses: actions/download-artifact@v4
-        with:
-          name: binary-arm
-          path: bin_arm
-      - name: Create Bundle and DMG
+      - name: Build for ${{ matrix.conf.arch }}
         run: |
-          BINARY="dosbox" # Adjust to your actual binary name
+          set -xo pipefail
+          if [[ "${{ matrix.conf.arch }}" == "x86_64" ]]; then
+            # Build x86_64 under Rosetta 2 on arm64 runner
+            arch -x86_64 bash -c '
+              set -xe
+              if [ ! -d /usr/local/Homebrew ]; then
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+              fi
+              eval "$(/usr/local/bin/brew shellenv)"
+              brew install meson ninja sdl2 libpng opusfile speexdsp
+              meson setup build-x86_64 -Dbuildtype=release -Dstrip=true
+              meson compile -C build-x86_64
+            '
+          else
+            brew install meson ninja sdl2 libpng opusfile speexdsp
+            meson setup build-arm64 -Dbuildtype=release -Dstrip=true
+            meson compile -C build-arm64
+          fi
+
+      - name: Upload per-arch binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: dosbox-${{ matrix.conf.arch }}
+          path: build-${{ matrix.conf.arch }}/dosbox
+          overwrite: true
+
+  publish_universal:
+    name: Publish Universal Build
+    needs: build_macos
+    runs-on: macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Set version variables
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION="nightly-$(git rev-parse --short HEAD)"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION_HASH=${VERSION}-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Download per-arch binaries
+        uses: actions/download-artifact@v8
+
+      - name: Install bundling tools
+        run: brew install dylibbundler librsvg
+
+      - name: Create universal binary
+        run: |
+          lipo -create dosbox-x86_64/dosbox dosbox-arm64/dosbox \
+            -output dosbox-universal
+          chmod +x dosbox-universal
+          lipo -info dosbox-universal
+
+      - name: Build valid .app bundle
+        run: |
           APP="BaseBox.app"
-          mkdir -p "$APP/Contents/MacOS"
-          
-          # Merge both native builds into one Universal Binary
-          lipo -create bin_x86/$BINARY bin_arm/$BINARY -output "$APP/Contents/MacOS/$BINARY"
-          
-          # Verify architecture
-          file "$APP/Contents/MacOS/$BINARY"
-          
-          # Build the DMG
-          hdiutil create -volname "BaseBox" -srcfolder "$APP" -ov -format UDZO BaseBox_Universal.dmg
-          
-      - name: Upload Universal DMG
-        uses: actions/upload-artifact@v4
+          BINARY="dosbox"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources"
+          cp dosbox-universal "$APP/Contents/MacOS/$BINARY"
+
+          # Copy icon if available
+          if [ -f "contrib/icons/macos/dosbox-staging.icns" ]; then
+            cp "contrib/icons/macos/dosbox-staging.icns" "$APP/Contents/Resources/AppIcon.icns"
+            ICON_LINE="  <key>CFBundleIconFile</key>\n  <string>AppIcon</string>"
+          else
+            ICON_LINE=""
+          fi
+
+          # Copy resources
+          if [ -d "contrib/resources" ]; then
+            cp -R contrib/resources/* "$APP/Contents/Resources/" 2>/dev/null || true
+          fi
+
+          # Create Info.plist with icon reference
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > "$APP/Contents/Info.plist"
+          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> "$APP/Contents/Info.plist"
+          echo '<plist version="1.0">' >> "$APP/Contents/Info.plist"
+          echo '<dict>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundleExecutable</key>' >> "$APP/Contents/Info.plist"
+          echo '  <string>dosbox</string>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundleIdentifier</key>' >> "$APP/Contents/Info.plist"
+          echo '  <string>com.basebox.app</string>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundleName</key>' >> "$APP/Contents/Info.plist"
+          echo '  <string>BaseBox</string>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundlePackageType</key>' >> "$APP/Contents/Info.plist"
+          echo '  <string>APPL</string>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundleShortVersionString</key>' >> "$APP/Contents/Info.plist"
+          echo "  <string>${{ env.VERSION }}</string>" >> "$APP/Contents/Info.plist"
+          echo '  <key>NSHighResolutionCapable</key>' >> "$APP/Contents/Info.plist"
+          echo '  <true/>' >> "$APP/Contents/Info.plist"
+          if [ -n "$ICON_LINE" ]; then
+            echo -e "$ICON_LINE" >> "$APP/Contents/Info.plist"
+          fi
+          echo '</dict>' >> "$APP/Contents/Info.plist"
+          echo '</plist>' >> "$APP/Contents/Info.plist"
+
+      - name: Bundle dynamic dependencies
+        run: |
+          dylibbundler -cd -b \
+            -x "BaseBox.app/Contents/MacOS/dosbox" \
+            -d "BaseBox.app/Contents/Frameworks/" \
+            -p @executable_path/../Frameworks/
+
+      - name: Ad-hoc codesign
+        run: codesign -s "-" --deep --force "BaseBox.app"
+
+      - name: Verify app bundle
+        run: |
+          otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -v "/usr/lib" | grep -v "/System"
+          ls -la "BaseBox.app/Contents/Frameworks/"
+
+      - name: Create DMG
+        run: |
+          DMG_NAME="BaseBox_Universal_${{ env.VERSION_HASH }}.dmg"
+          mkdir dmg-temp
+          cp -R "BaseBox.app" dmg-temp/
+          ln -s /Applications dmg-temp/Applications
+          hdiutil create \
+            -volname "BaseBox" \
+            -srcfolder dmg-temp \
+            -ov \
+            -format UDZO "$DMG_NAME"
+          rm -rf dmg-temp
+          echo "DMG_NAME=$DMG_NAME" >> $GITHUB_ENV
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v7
         with:
           name: macOS-Universal-DMG
-          path: "*.dmg"
+          path: ${{ env.DMG_NAME }}
 
-      - name: Release DMG
+      - name: Release DMG (on tag push)
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: BaseBox_Universal.dmg
+          files: ${{ env.DMG_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
