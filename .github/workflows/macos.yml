@@ -205,22 +205,94 @@ jobs:
 
           # 4. RECURSIVE FIX: Clean up nested dependencies inside Frameworks
           echo "=== Recursively fixing Frameworks contents ==="
-          bundled_libs=$(find "$FRAMEWORKS_DIR" -name "*.dylib")
-          for lib in $bundled_libs; do
-            echo "Processing $lib..."
-            # Find any link pointing to a Homebrew opt path
-            deps=$(otool -L "$lib" | grep -E "/usr/local/opt/|/opt/homebrew/opt/" | awk '{print $1}')
-            for dep in $deps; do
-              dep_name=$(basename "$dep")
-              if [ -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+          
+          # Iteratively process until no more deps to bundle
+          for iteration in 1 2 3 4 5; do
+            echo "=== Iteration $iteration ==="
+            bundled_libs=$(find "$FRAMEWORKS_DIR" -name "*.dylib")
+            found_new=0
+            
+            for lib in $bundled_libs; do
+              lib_basename=$(basename $lib)
+              echo "Processing $lib_basename..."
+              
+              # Get ALL deps that are not system libs
+              deps=$(otool -L "$lib" | grep -v "$lib_basename" | awk '{print $1}' | grep -E "^/(usr/local|opt/homebrew)/" || true)
+              
+              for dep in $deps; do
+                dep_name=$(basename "$dep")
+                
+                # If not already bundled, try to copy it
+                if [ ! -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                  found=0
+                  # Try exact path first
+                  if [ -f "$dep" ]; then
+                    echo "  Bundling new dep: $dep_name from $dep"
+                    cp "$dep" "$FRAMEWORKS_DIR/"
+                    chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                    found=1
+                    found_new=1
+                  else
+                    # Search in common locations
+                    for prefix in /opt/homebrew /usr/local; do
+                      for search in "$prefix/lib/$dep_name" "$prefix/opt"/*/lib/"$dep_name"; do
+                        if [ -f "$search" ]; then
+                          echo "  Bundling new dep: $dep_name from $search"
+                          cp "$search" "$FRAMEWORKS_DIR/"
+                          chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                          found=1
+                          found_new=1
+                          break 2
+                        fi
+                      done
+                    done
+                  fi
+                  if [ $found -eq 0 ]; then
+                    echo "  WARNING: Could not find $dep_name (referenced by $lib_basename)"
+                    continue
+                  fi
+                fi
+                
+                # Redirect the path
                 echo "  Redirecting $dep -> @executable_path/../Frameworks/$dep_name"
                 install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$lib"
-              fi
+              done
+              
+              # Fix the ID of the library itself to be relative
+              lib_id_path=$(otool -D "$lib" | sed -n '2p')
+              lib_id_name=$(basename "$lib_id_path")
+              install_name_tool -id "@executable_path/../Frameworks/$lib_id_name" "$lib"
             done
-            # Fix the ID of the library itself to be relative
-            lib_id_path=$(otool -D "$lib" | sed -n '2p')
-            lib_id_name=$(basename "$lib_id_path")
-            install_name_tool -id "@executable_path/../Frameworks/$lib_id_name" "$lib"
+            
+            # If no new deps found, we're done
+            if [ $found_new -eq 0 ]; then
+              echo "No new dependencies found, done."
+              break
+            fi
+          done
+                  done
+                  if [ $found -eq 0 ]; then
+                    echo "  WARNING: Could not find $dep_name (referenced by $(basename $lib))"
+                    continue
+                  fi
+                fi
+                
+                # Redirect the path
+                echo "  Redirecting $dep -> @executable_path/../Frameworks/$dep_name"
+                install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$lib"
+              done
+              
+              # Fix the ID of the library itself to be relative
+              lib_id_path=$(otool -D "$lib" | sed -n '2p')
+              lib_id_name=$(basename "$lib_id_path")
+              install_name_tool -id "@executable_path/../Frameworks/$lib_id_name" "$lib"
+            done
+            
+            # If no new deps found, we're done
+            if [ $found_new -eq 0 ]; then
+              echo "No new dependencies found, done."
+              break
+            fi
           done
 
           # 5. Verification
