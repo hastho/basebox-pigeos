@@ -142,27 +142,37 @@ jobs:
           echo '</dict>' >> "$APP/Contents/Info.plist"
           echo '</plist>' >> "$APP/Contents/Info.plist"
 
-      - name: Clean environment and fix libintl
+      - name: Force link glib for bundler
         run: |
-          # Remove potential conflicting symlinks that cause bundling hangs
-          rm -f /usr/local/bin/python3
-          rm -f /usr/local/bin/pip3
-          
-          # Force link dependencies to ensure bundling tools find them
-          brew link --overwrite gettext
-          brew link --overwrite glib
-          
-          # Ensure the correct brew path is in front
-          echo "/usr/local/bin" >> $GITHUB_PATH
+          brew link --overwrite glib gettext
+          # Verify the files actually exist where dylibbundler wants them
+          ls -l /usr/local/opt/glib/lib/libglib-2.0.0.dylib || true
+          ls -l /usr/local/opt/gettext/lib/libintl.dylib || true
 
       - name: Bundle dynamic dependencies
         timeout-minutes: 10
         run: |
           set -x
-          dylibbundler -cd -b \
+          # Add search paths for both arm64 (/opt/homebrew) and x86_64 (/usr/local) Homebrew
+          # Use yes quit to prevent interactive hanging if a library is not found
+          yes quit | dylibbundler -cd -b \
             -x "BaseBox.app/Contents/MacOS/dosbox" \
             -d "BaseBox.app/Contents/Frameworks/" \
-            -p @executable_path/../Frameworks/ || echo "Warning: dylibbundler failed, continuing..."
+            -p @executable_path/../Frameworks/ \
+            -s /usr/local/lib \
+            -s /usr/local/opt/glib/lib \
+            -s /usr/local/opt/gettext/lib \
+            -s /usr/local/opt/libpng/lib \
+            -s /usr/local/opt/sdl2/lib \
+            -s /usr/local/opt/opusfile/lib \
+            -s /usr/local/opt/speexdsp/lib \
+            -s /opt/homebrew/lib \
+            -s /opt/homebrew/opt/glib/lib \
+            -s /opt/homebrew/opt/gettext/lib \
+            -s /opt/homebrew/opt/libpng/lib \
+            -s /opt/homebrew/opt/sdl2/lib \
+            -s /opt/homebrew/opt/opusfile/lib \
+            -s /opt/homebrew/opt/speexdsp/lib || echo "Warning: dylibbundler failed, continuing..."
 
       - name: Ad-hoc codesign
         run: codesign -s "-" --deep --force "BaseBox.app"
