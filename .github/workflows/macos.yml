@@ -229,76 +229,107 @@ jobs:
           
           FRAMEWORKS_DIR="BaseBox.app/Contents/Frameworks"
           
-          # Function to fix a single file's dependencies
-          # Also bundles any missing dependencies
-          fix_deps() {
+          # First, copy any missing direct dependencies
+          for entry in "${LIBS[@]}"; do
+            libname="${entry%%:*}"
+            pkg="${entry##*:}"
+            if [ ! -f "$FRAMEWORKS_DIR/$libname" ]; then
+              for prefix in /opt/homebrew /usr/local; do
+                if [ -f "$prefix/opt/$pkg/lib/$libname" ]; then
+                  echo "Copying: $libname from $prefix/opt/$pkg/lib/$libname"
+                  cp "$prefix/opt/$pkg/lib/$libname" "$FRAMEWORKS_DIR/"
+                  break
+                fi
+              done
+            fi
+          done
+          
+          # Make all bundled libraries writable
+          chmod +w "$FRAMEWORKS_DIR"/*.dylib 2>/dev/null || true
+          chmod +w "BaseBox.app/Contents/MacOS/dosbox" 2>/dev/null || true
+          
+          # Function to get deps of a file (avoids subshell)
+          get_deps() {
+            otool -L "$1" 2>/dev/null | grep -v "$(basename "$1")" | awk '{print $1}'
+          }
+          
+          # Function to fix one file's dependencies
+          fix_file_deps() {
             local target="$1"
             [ -f "$target" ] || return 0
             
             echo "Processing: $target"
-            # Get list of dependencies (exclude self-references)
-            deps=$(otool -L "$target" 2>/dev/null | grep -v "$target" | awk '{print $1}')
             
-            for dep_path in $deps; do
+            # Get deps into temp file to avoid subshell
+            local deps_file=$(mktemp)
+            get_deps "$target" > "$deps_file"
+            
+            while read -r dep_path; do
               [ -z "$dep_path" ] && continue
               
-              # Skip system libraries and correct paths
+              # Skip system libs and already-fixed paths
               [[ "$dep_path" == /usr/lib/* ]] && continue
               [[ "$dep_path" == /System/* ]] && continue
-              [[ "$dep_path" == "@executable_path"* ]] && continue
-              [[ "$dep_path" == "@rpath"* ]] && continue
-              [[ "$dep_path" == "@loader_path"* ]] && continue
+              [[ "$dep_path" == @executable_path* ]] && continue
+              [[ "$dep_path" == @rpath* ]] && continue
+              [[ "$dep_path" == @loader_path* ]] && continue
               
-              dep_name=$(basename "$dep_path")
+              local dep_name=$(basename "$dep_path")
               
-              # If dep is not in Frameworks, try to bundle it
+              # Bundle if missing
               if [ ! -f "$FRAMEWORKS_DIR/$dep_name" ]; then
-                bundled=0
-                # Try exact path first
+                local found=0
+                # Try exact path
                 if [ -f "$dep_path" ]; then
-                  echo "  Bundling: $dep_name from $dep_path"
+                  echo "  Bundling: $dep_name"
                   cp "$dep_path" "$FRAMEWORKS_DIR/"
                   chmod +w "$FRAMEWORKS_DIR/$dep_name"
-                  bundled=1
+                  found=1
                 else
-                  # Search in common Homebrew locations
+                  # Search common locations
                   for prefix in /opt/homebrew /usr/local; do
                     for search in "$prefix/lib/$dep_name" "$prefix/opt"/*/lib/"$dep_name"; do
                       if [ -f "$search" ]; then
                         echo "  Bundling: $dep_name from $search"
                         cp "$search" "$FRAMEWORKS_DIR/"
                         chmod +w "$FRAMEWORKS_DIR/$dep_name"
-                        bundled=1
+                        found=1
                         break 2
                       fi
                     done
                   done
                 fi
-                if [ $bundled -eq 0 ]; then
-                  echo "  WARNING: Could not find: $dep_name (referenced as: $dep_path)"
+                
+                if [ $found -eq 0 ]; then
+                  echo "  WARNING: Could not find $dep_name (referenced as: $dep_path)"
                   continue
                 fi
               fi
               
-              # Fix the reference in target
-              install_name_tool -change "$dep_path" "@executable_path/../Frameworks/$dep_name" "$target" 2>/dev/null || true
-            done
+              # Fix the reference
+              echo "  Fixing: $target -> $dep_name"
+              install_name_tool -change "$dep_path" "@executable_path/../Frameworks/$dep_name" "$target"
+            done < "$deps_file"
+            
+            rm -f "$deps_file"
           }
-          
-          export -f fix_deps
+          export -f fix_file_deps
           export FRAMEWORKS_DIR
           
           # Fix dosbox first
-          fix_deps "BaseBox.app/Contents/MacOS/dosbox"
+          fix_file_deps "BaseBox.app/Contents/MacOS/dosbox"
           
-          # Iteratively fix all bundled libraries (multiple passes to catch transitive deps)
+          # Iteratively fix all bundled libraries
           for iteration in 1 2 3 4 5; do
             echo "=== Iteration $iteration ==="
             for lib in "$FRAMEWORKS_DIR"/*.dylib; do
               [ -f "$lib" ] || continue
-              fix_deps "$lib"
+              fix_file_deps "$lib"
             done
           done
+          
+          # Make libraries read-only again
+          chmod -w "$FRAMEWORKS_DIR"/*.dylib 2>/dev/null || true
           
           echo "=== Final verification ==="
           echo "Checking for unpatched absolute paths..."
