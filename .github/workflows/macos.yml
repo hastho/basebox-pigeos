@@ -170,21 +170,21 @@ jobs:
           mkdir -p "$FRAMEWORKS_DIR"
 
           echo "=== Step 1: Recursively collecting all dependencies ==="
-          # Initial seed: start with the main binary
-          to_process_list=$(mktemp)
-          echo "$BINARY" > "$to_process_list"
-          
-          processed_list=$(mktemp)
-          
-          while [ -s "$to_process_list" ]; do
-            # Read first line
-            current=$(head -1 "$to_process_list")
-            # Remove first line
-            sed -i '' '1d' "$to_process_list"
+          # Use a temp file as a queue
+          QUEUE=$(mktemp)
+          echo "$BINARY" > "$QUEUE"
+          PROCESSED=$(mktemp)
+          touch "$PROCESSED"
+
+          while [ -s "$QUEUE" ]; do
+            # Read first line safely
+            current=$(head -n 1 "$QUEUE")
+            # Remove first line using grep -v (macOS safe)
+            grep -v "^$current$" "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
             
             # Skip if already processed
-            grep -q "^$current$" "$processed_list" 2>/dev/null && continue
-            echo "$current" >> "$processed_list"
+            grep -q "^$current$" "$PROCESSED" && continue
+            echo "$current" >> "$PROCESSED"
             
             [ -f "$current" ] || continue
             echo "Processing: $current"
@@ -193,33 +193,30 @@ jobs:
             deps=$(otool -L "$current" 2>/dev/null | grep -E "/usr/local/|/opt/homebrew/" | awk '{print $1}')
             
             for dep in $deps; do
-              libname=$(basename "$dep")
+              dep_name=$(basename "$dep")
               # If we haven't bundled this library yet, copy it
-              if [ ! -f "$FRAMEWORKS_DIR/$libname" ]; then
-                echo "  Bundling new dependency: $libname from $dep"
+              if [ ! -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                echo "  Bundling new dependency: $dep_name (from $dep)"
                 cp "$dep" "$FRAMEWORKS_DIR/"
-                chmod +w "$FRAMEWORKS_DIR/$libname"
-                # Add this new library to the queue to check its own dependencies
-                echo "$FRAMEWORKS_DIR/$libname" >> "$to_process_list"
+                chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                # Add to queue to process its own deps
+                echo "$FRAMEWORKS_DIR/$dep_name" >> "$QUEUE"
               fi
             done
           done
-          
-          rm -f "$to_process_list" "$processed_list"
+
+          rm -f "$QUEUE" "${QUEUE}.tmp" "$PROCESSED"
 
           echo "=== Step 2: Fixing all load commands ==="
-          
-          # Fix the main binary and every library in Frameworks
-          for target in "$BINARY" "$FRAMEWORKS_DIR"/*.dylib; do
-            [ -f "$target" ] || continue
+          # Process all files (binary + all bundled libs)
+          find "$APP_DIR" -type f \( -perm +111 -o -name "*.dylib" \) | while read -r target; do
             echo "Patching: $target"
             
-            # Get the deps of this target that point to Homebrew
+            # Get deps that need fixing
             deps=$(otool -L "$target" 2>/dev/null | grep -E "/usr/local/|/opt/homebrew/" | awk '{print $1}')
             
             for dep in $deps; do
               dep_name=$(basename "$dep")
-              # If this dep is in our bundle, redirect it
               if [ -f "$FRAMEWORKS_DIR/$dep_name" ]; then
                 echo "  Redirecting: $dep -> @executable_path/../Frameworks/$dep_name"
                 install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$target"
@@ -242,7 +239,7 @@ jobs:
             otool -L "$BINARY" | grep -E "/usr/local/|/opt/homebrew/"
             exit 1
           fi
-          
+
           # Check all bundled libraries too
           for lib in "$FRAMEWORKS_DIR"/*.dylib; do
             [ -f "$lib" ] || continue
@@ -252,7 +249,7 @@ jobs:
               exit 1
             fi
           done
-          
+
           echo "Success: All dependencies bundled and patched."
           
           echo "=== Final verification ==="
