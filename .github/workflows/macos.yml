@@ -169,154 +169,91 @@ jobs:
           BINARY="$APP_DIR/Contents/MacOS/dosbox"
           mkdir -p "$FRAMEWORKS_DIR"
 
-          # 1. Define dependencies
-          LIBS=(
-            "libglib-2.0.0.dylib:glib"
-            "libintl.8.dylib:gettext"
-            "libpng16.16.dylib:libpng"
-            "libSDL2-2.0.0.dylib:sdl2"
-            "libopusfile.0.dylib:opusfile"
-            "libspeexdsp.1.dylib:speexdsp"
-          )
-
-          # 2. Copy and set permissions
-          echo "=== Bundling libraries ==="
-          for entry in "${LIBS[@]}"; do
-            libname="${entry%%:*}"
-            pkg="${entry##*:}"
-            for prefix in /opt/homebrew /usr/local; do
-              src="$prefix/opt/$pkg/lib/$libname"
-              if [ -f "$src" ]; then
-                cp "$src" "$FRAMEWORKS_DIR/"
+          echo "=== Step 1: Recursively collecting all dependencies ==="
+          # Initial seed: start with the main binary
+          to_process_list=$(mktemp)
+          echo "$BINARY" > "$to_process_list"
+          
+          processed_list=$(mktemp)
+          
+          while [ -s "$to_process_list" ]; do
+            # Read first line
+            current=$(head -1 "$to_process_list")
+            # Remove first line
+            sed -i '' '1d' "$to_process_list"
+            
+            # Skip if already processed
+            grep -q "^$current$" "$processed_list" 2>/dev/null && continue
+            echo "$current" >> "$processed_list"
+            
+            [ -f "$current" ] || continue
+            echo "Processing: $current"
+            
+            # Find any Homebrew paths linked in this file
+            deps=$(otool -L "$current" 2>/dev/null | grep -E "/usr/local/|/opt/homebrew/" | awk '{print $1}')
+            
+            for dep in $deps; do
+              libname=$(basename "$dep")
+              # If we haven't bundled this library yet, copy it
+              if [ ! -f "$FRAMEWORKS_DIR/$libname" ]; then
+                echo "  Bundling new dependency: $libname from $dep"
+                cp "$dep" "$FRAMEWORKS_DIR/"
                 chmod +w "$FRAMEWORKS_DIR/$libname"
+                # Add this new library to the queue to check its own dependencies
+                echo "$FRAMEWORKS_DIR/$libname" >> "$to_process_list"
               fi
             done
           done
-
-          # 3. Fix the main binary
-          echo "=== Fixing main binary paths ==="
-          for entry in "${LIBS[@]}"; do
-            libname="${entry%%:*}"
-            pkg="${entry##*:}"
-            # Redirect both possible Homebrew prefixes to the bundle
-            install_name_tool -change "/usr/local/opt/$pkg/lib/$libname" "@executable_path/../Frameworks/$libname" "$BINARY" || true
-            install_name_tool -change "/opt/homebrew/opt/$pkg/lib/$libname" "@executable_path/../Frameworks/$libname" "$BINARY" || true
-          done
-
-          # 4. RECURSIVE FIX: Clean up nested dependencies inside Frameworks
-          echo "=== Recursively fixing Frameworks contents ==="
           
-          # Iteratively process until no more deps to bundle
-          for iteration in 1 2 3 4 5; do
-            echo "=== Iteration $iteration ==="
-            bundled_libs=$(find "$FRAMEWORKS_DIR" -name "*.dylib")
-            found_new=0
+          rm -f "$to_process_list" "$processed_list"
+
+          echo "=== Step 2: Fixing all load commands ==="
+          
+          # Fix the main binary and every library in Frameworks
+          for target in "$BINARY" "$FRAMEWORKS_DIR"/*.dylib; do
+            [ -f "$target" ] || continue
+            echo "Patching: $target"
             
-            for lib in $bundled_libs; do
-              lib_basename=$(basename $lib)
-              echo "Processing $lib_basename..."
-              
-              # Get ALL deps that are not system libs
-              deps=$(otool -L "$lib" | grep -v "$lib_basename" | awk '{print $1}' | grep -E "^/(usr/local|opt/homebrew)/" || true)
-              
-              for dep in $deps; do
-                dep_name=$(basename "$dep")
-                
-                # If not already bundled, try to copy it
-                if [ ! -f "$FRAMEWORKS_DIR/$dep_name" ]; then
-                  found=0
-                  # Try exact path first
-                  if [ -f "$dep" ]; then
-                    echo "  Bundling new dep: $dep_name from $dep"
-                    cp "$dep" "$FRAMEWORKS_DIR/"
-                    chmod +w "$FRAMEWORKS_DIR/$dep_name"
-                    found=1
-                    found_new=1
-                  else
-                    # Search in common locations
-                    for prefix in /opt/homebrew /usr/local; do
-                      for search in "$prefix/lib/$dep_name" "$prefix/opt"/*/lib/"$dep_name"; do
-                        if [ -f "$search" ]; then
-                          echo "  Bundling new dep: $dep_name from $search"
-                          cp "$search" "$FRAMEWORKS_DIR/"
-                          chmod +w "$FRAMEWORKS_DIR/$dep_name"
-                          found=1
-                          found_new=1
-                          break 2
-                        fi
-                      done
-                    done
-                  fi
-                  if [ $found -eq 0 ]; then
-                    echo "  WARNING: Could not find $dep_name (referenced by $lib_basename)"
-                    continue
-                  fi
-                fi
-                
-                # Redirect the path
-                echo "  Redirecting $dep -> @executable_path/../Frameworks/$dep_name"
-                install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$lib"
-              done
-              
-              # Fix the ID of the library itself to be relative
-              lib_id_path=$(otool -D "$lib" | sed -n '2p')
-              lib_id_name=$(basename "$lib_id_path")
-              install_name_tool -id "@executable_path/../Frameworks/$lib_id_name" "$lib"
+            # Get the deps of this target that point to Homebrew
+            deps=$(otool -L "$target" 2>/dev/null | grep -E "/usr/local/|/opt/homebrew/" | awk '{print $1}')
+            
+            for dep in $deps; do
+              dep_name=$(basename "$dep")
+              # If this dep is in our bundle, redirect it
+              if [ -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                echo "  Redirecting: $dep -> @executable_path/../Frameworks/$dep_name"
+                install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$target"
+              fi
             done
             
-            # If no new deps found, we're done
-            if [ $found_new -eq 0 ]; then
-              echo "No new dependencies found, done."
-              break
-            fi
-          done
-                  done
-                  if [ $found -eq 0 ]; then
-                    echo "  WARNING: Could not find $dep_name (referenced by $(basename $lib))"
-                    continue
-                  fi
-                fi
-                
-                # Redirect the path
-                echo "  Redirecting $dep -> @executable_path/../Frameworks/$dep_name"
-                install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$lib"
-              done
-              
-              # Fix the ID of the library itself to be relative
-              lib_id_path=$(otool -D "$lib" | sed -n '2p')
-              lib_id_name=$(basename "$lib_id_path")
-              install_name_tool -id "@executable_path/../Frameworks/$lib_id_name" "$lib"
-            done
-            
-            # If no new deps found, we're done
-            if [ $found_new -eq 0 ]; then
-              echo "No new dependencies found, done."
-              break
+            # If it's a dylib, fix its internal ID
+            if [[ "$target" == *.dylib ]]; then
+              lib_id=$(basename "$target")
+              install_name_tool -id "@executable_path/../Frameworks/$lib_id" "$target"
             fi
           done
 
-          # 5. Verification
-          echo "=== Final verification ==="
-          echo "Main binary paths:"
-          otool -L "$BINARY" | grep -E "libglib|libintl|libpng|libSDL" || echo "All paths are relative"
-          
-          echo "=== Check for unpatched paths ==="
-          failed=0
-          for file in "$BINARY" $bundled_libs; do
-            [ -f "$file" ] || continue
-            if otool -L "$file" 2>/dev/null | grep -E "/usr/local/|/opt/homebrew/" | grep -v "@executable_path"; then
-              echo "::error::Unpatched absolute paths in $(basename "$file"):"
-              otool -L "$file" | grep -E "/usr/local/|/opt/homebrew/"
-              failed=1
-            fi
-          done
-          
-          if [ $failed -eq 1 ]; then
-            echo "::error::Build failed - unpatched library paths found"
+          echo "=== Step 3: Ad-hoc signing ==="
+          codesign --force --deep --sign - "$APP_DIR"
+
+          echo "=== Step 4: Final verification ==="
+          if otool -L "$BINARY" | grep -E "/usr/local/|/opt/homebrew/" | grep -qv "@executable_path"; then
+            echo "Error: Absolute paths still remain in binary!"
+            otool -L "$BINARY" | grep -E "/usr/local/|/opt/homebrew/"
             exit 1
           fi
           
-          echo "All libraries properly referenced with @executable_path"
+          # Check all bundled libraries too
+          for lib in "$FRAMEWORKS_DIR"/*.dylib; do
+            [ -f "$lib" ] || continue
+            if otool -L "$lib" | grep -E "/usr/local/|/opt/homebrew/" | grep -qv "@executable_path"; then
+              echo "Error: Absolute paths still remain in $(basename $lib)!"
+              otool -L "$lib" | grep -E "/usr/local/|/opt/homebrew/"
+              exit 1
+            fi
+          done
+          
+          echo "Success: All dependencies bundled and patched."
           
           echo "=== Final verification ==="
           echo "Checking for unpatched absolute paths..."
