@@ -1,5 +1,8 @@
 name: macOS builds
-permissions: read-all
+permissions:
+  contents: write
+  pull-requests: read
+  actions: read
 
 on:
   push:
