@@ -164,13 +164,12 @@ jobs:
         run: |
           set -x
           
-          # Create Frameworks directory if not exists
+          # Create Frameworks directory
           mkdir -p "BaseBox.app/Contents/Frameworks/"
           
-          # Run dylibbundler with all search paths
-          # Use yes quit to prevent interactive hanging
-          # Redirect output to log for debugging
-          yes quit | dylibbundler -cd -b \
+          # Run dylibbundler - without 'yes quit' which causes it to abort
+          # Add all possible Homebrew library paths for both archs
+          dylibbundler -cd -b \
             -x "BaseBox.app/Contents/MacOS/dosbox" \
             -d "BaseBox.app/Contents/Frameworks/" \
             -p @executable_path/../Frameworks/ \
@@ -187,44 +186,51 @@ jobs:
             -s /opt/homebrew/opt/libpng/lib \
             -s /opt/homebrew/opt/sdl2/lib \
             -s /opt/homebrew/opt/opusfile/lib \
-            -s /opt/homebrew/opt/speexdsp/lib 2>&1 | tee dylibbundler.log || echo "Warning: dylibbundler failed, continuing..."
+            -s /opt/homebrew/opt/speexdsp/lib || echo "dylibbundler failed, will do manual bundling..."
           
           # Show what was bundled
-          echo "Bundled libraries:"
-          ls -la "BaseBox.app/Contents/Frameworks/"
-
-      - name: Verify dylibbundler path rewrite
-        run: |
-          echo "Checking load commands for dosbox:"
-          otool -l "BaseBox.app/Contents/MacOS/dosbox" | grep -A 2 "LC_LOAD_DYLIB" | grep "name"
+          echo "Libraries bundled by dylibbundler:"
+          ls -la "BaseBox.app/Contents/Frameworks/" || true
           
-          # Check for hardcoded absolute paths
-          if otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -q "/opt/homebrew\|/usr/local"; then
-            echo "FAILURE: Absolute paths still exist in binary:"
-            otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep "/opt/homebrew\|/usr/local"
-            echo "Attempting manual fix with install_name_tool..."
+          # If Frameworks is empty, do manual bundling
+          if [ -z "$(ls -A "BaseBox.app/Contents/Frameworks/" 2>/dev/null)" ]; then
+            echo "Frameworks empty, doing manual library bundling..."
             
-            # Manual fix for critical libraries
-            for lib in "glib-2.0" "gettext" "libintl" "libpng" "sdl2" "opusfile" "speexdsp"; do
-              # Find the bundled dylib
-              bundled_lib=$(find "BaseBox.app/Contents/Frameworks" -name "${lib}*.dylib" -type f | head -1)
-              if [ -n "$bundled_lib" ]; then
-                basename=$(basename "$bundled_lib")
-                # Find the old path in the binary
-                old_path=$(otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep "$lib" | awk '{print $1}' | head -1)
-                if [ -n "$old_path" ]; then
-                  echo "Changing $old_path to @executable_path/../Frameworks/$basename"
-                  install_name_tool -change "$old_path" "@executable_path/../Frameworks/$basename" "BaseBox.app/Contents/MacOS/dosbox"
-                fi
+            # Get list of libraries with absolute paths from the binary
+            otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -E "/opt/homebrew|/usr/local" | awk '{print $1}' | while read libpath; do
+              if [ -f "$libpath" ]; then
+                echo "Copying $libpath to Frameworks..."
+                cp "$libpath" "BaseBox.app/Contents/Frameworks/"
+                libname=$(basename "$libpath")
+                echo "Changing reference from $libpath to @executable_path/../Frameworks/$libname"
+                install_name_tool -change "$libpath" "@executable_path/../Frameworks/$libname" "BaseBox.app/Contents/MacOS/dosbox"
+              else
+                echo "WARNING: Library not found: $libpath"
               fi
             done
-            
-            # Verify again
-            echo "After manual fix:"
-            otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -v "/usr/lib" | grep -v "/System"
-          else
-            echo "SUCCESS: Paths are relative or system-only"
           fi
+          
+          echo "Final Frameworks contents:"
+          ls -la "BaseBox.app/Contents/Frameworks/"
+
+      - name: Verify and fix library paths
+        run: |
+          echo "Checking library references in dosbox:"
+          otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -v "/usr/lib" | grep -v "/System" || echo "Only system libraries referenced"
+          
+          # Check for remaining absolute paths and fix them
+          otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -E "/opt/homebrew|/usr/local" | while read line; do
+            old_path=$(echo "$line" | awk '{print $1}')
+            libname=$(basename "$old_path")
+            # Check if the library is in our Frameworks
+            if [ -f "BaseBox.app/Contents/Frameworks/$libname" ]; then
+              echo "Fixing: $old_path -> @executable_path/../Frameworks/$libname"
+              install_name_tool -change "$old_path" "@executable_path/../Frameworks/$libname" "BaseBox.app/Contents/MacOS/dosbox"
+            fi
+          done
+          
+          echo "Final verification - library references:"
+          otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -v "/usr/lib" | grep -v "/System" || echo "All non-system libraries properly referenced"
 
       - name: Ad-hoc codesign
         run: codesign -s "-" --deep --force "BaseBox.app"
