@@ -55,7 +55,15 @@ jobs:
         run: |
           set -xo pipefail
           BUILD_DIR="build-${{ matrix.conf.arch }}"
-          meson setup "$BUILD_DIR" -Dbuildtype=release -Dstrip=true
+          
+          # Set rpath-aware linking for dylibbundler compatibility
+          export LDFLAGS="-Wl,-rpath,@executable_path/../Frameworks"
+          
+          meson setup "$BUILD_DIR" \
+            -Dbuildtype=release \
+            -Dstrip=true \
+            -Dinstall_name_dir='@executable_path/../Frameworks'
+          
           meson compile -C "$BUILD_DIR"
 
       - name: Upload per-arch binary
@@ -156,8 +164,13 @@ jobs:
         timeout-minutes: 10
         run: |
           set -x
-          # Add search paths for both arm64 (/opt/homebrew) and x86_64 (/usr/local) Homebrew
-          # Use yes quit to prevent interactive hanging if a library is not found
+          
+          # Create Frameworks directory if not exists
+          mkdir -p "BaseBox.app/Contents/Frameworks/"
+          
+          # Run dylibbundler with all search paths
+          # Use yes quit to prevent interactive hanging
+          # Redirect output to log for debugging
           yes quit | dylibbundler -cd -b \
             -x "BaseBox.app/Contents/MacOS/dosbox" \
             -d "BaseBox.app/Contents/Frameworks/" \
@@ -175,7 +188,44 @@ jobs:
             -s /opt/homebrew/opt/libpng/lib \
             -s /opt/homebrew/opt/sdl2/lib \
             -s /opt/homebrew/opt/opusfile/lib \
-            -s /opt/homebrew/opt/speexdsp/lib || echo "Warning: dylibbundler failed, continuing..."
+            -s /opt/homebrew/opt/speexdsp/lib 2>&1 | tee dylibbundler.log || echo "Warning: dylibbundler failed, continuing..."
+          
+          # Show what was bundled
+          echo "Bundled libraries:"
+          ls -la "BaseBox.app/Contents/Frameworks/"
+
+      - name: Verify dylibbundler path rewrite
+        run: |
+          echo "Checking load commands for dosbox:"
+          otool -l "BaseBox.app/Contents/MacOS/dosbox" | grep -A 2 "LC_LOAD_DYLIB" | grep "name"
+          
+          # Check for hardcoded absolute paths
+          if otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -q "/opt/homebrew\|/usr/local"; then
+            echo "FAILURE: Absolute paths still exist in binary:"
+            otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep "/opt/homebrew\|/usr/local"
+            echo "Attempting manual fix with install_name_tool..."
+            
+            # Manual fix for critical libraries
+            for lib in "glib-2.0" "gettext" "libintl" "libpng" "sdl2" "opusfile" "speexdsp"; do
+              # Find the bundled dylib
+              bundled_lib=$(find "BaseBox.app/Contents/Frameworks" -name "${lib}*.dylib" -type f | head -1)
+              if [ -n "$bundled_lib" ]; then
+                basename=$(basename "$bundled_lib")
+                # Find the old path in the binary
+                old_path=$(otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep "$lib" | awk '{print $1}' | head -1)
+                if [ -n "$old_path" ]; then
+                  echo "Changing $old_path to @executable_path/../Frameworks/$basename"
+                  install_name_tool -change "$old_path" "@executable_path/../Frameworks/$basename" "BaseBox.app/Contents/MacOS/dosbox"
+                fi
+              fi
+            done
+            
+            # Verify again
+            echo "After manual fix:"
+            otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -v "/usr/lib" | grep -v "/System"
+          else
+            echo "SUCCESS: Paths are relative or system-only"
+          fi
 
       - name: Ad-hoc codesign
         run: codesign -s "-" --deep --force "BaseBox.app"
