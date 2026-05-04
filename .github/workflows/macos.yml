@@ -170,17 +170,17 @@ jobs:
           mkdir -p "$FRAMEWORKS_DIR"
 
           echo "=== Step 1: Recursively collecting all dependencies ==="
-          # Use a temp file as a queue
+          # Use temp files as queue (avoid subshell issues)
           QUEUE=$(mktemp)
           echo "$BINARY" > "$QUEUE"
           PROCESSED=$(mktemp)
           touch "$PROCESSED"
 
           while [ -s "$QUEUE" ]; do
-            # Read first line safely
+            # Read first line
             current=$(head -n 1 "$QUEUE")
-            # Remove first line using grep -v (macOS safe)
-            grep -v "^$current$" "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
+            # Remove first line
+            tail -n +2 "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
             
             # Skip if already processed
             grep -q "^$current$" "$PROCESSED" && continue
@@ -208,8 +208,15 @@ jobs:
           rm -f "$QUEUE" "${QUEUE}.tmp" "$PROCESSED"
 
           echo "=== Step 2: Fixing all load commands ==="
-          # Process all files (binary + all bundled libs)
-          find "$APP_DIR" -type f \( -perm +111 -o -name "*.dylib" \) | while read -r target; do
+          
+          # Get list of all bundled libraries
+          all_targets="$BINARY"
+          for lib in "$FRAMEWORKS_DIR"/*.dylib; do
+            [ -f "$lib" ] && all_targets="$all_targets $lib"
+          done
+          
+          for target in $all_targets; do
+            [ -f "$target" ] || continue
             echo "Patching: $target"
             
             # Get deps that need fixing
