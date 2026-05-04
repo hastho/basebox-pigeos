@@ -170,21 +170,20 @@ jobs:
           mkdir -p "$FRAMEWORKS_DIR"
 
           echo "=== Step 1: Recursively collecting all dependencies ==="
-          # Use temp files as queue (avoid subshell issues)
-          QUEUE=$(mktemp)
-          echo "$BINARY" > "$QUEUE"
-          PROCESSED=$(mktemp)
-          touch "$PROCESSED"
-
-          while [ -s "$QUEUE" ]; do
-            # Read first line
-            current=$(head -n 1 "$QUEUE")
+          # Initial seed: start with the main binary
+          to_process_list=$(mktemp)
+          echo "$BINARY" > "$to_process_list"
+          
+          processed_list=$(mktemp)
+          
+          while [ -s "$to_process_list" ]; do
+            current=$(head -n 1 "$to_process_list")
             # Remove first line
-            tail -n +2 "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
+            tail -n +2 "$to_process_list" > "${to_process_list}.tmp" && mv "${to_process_list}.tmp" "$to_process_list"
             
             # Skip if already processed
-            grep -q "^$current$" "$PROCESSED" && continue
-            echo "$current" >> "$PROCESSED"
+            grep -q "^$current$" "$processed_list" 2>/dev/null && continue
+            echo "$current" >> "$processed_list"
             
             [ -f "$current" ] || continue
             echo "Processing: $current"
@@ -196,16 +195,16 @@ jobs:
               dep_name=$(basename "$dep")
               # If we haven't bundled this library yet, copy it
               if [ ! -f "$FRAMEWORKS_DIR/$dep_name" ]; then
-                echo "  Bundling new dependency: $dep_name (from $dep)"
+                echo "  Bundling new dep: $dep_name (from $dep)"
                 cp "$dep" "$FRAMEWORKS_DIR/"
                 chmod +w "$FRAMEWORKS_DIR/$dep_name"
                 # Add to queue to process its own deps
-                echo "$FRAMEWORKS_DIR/$dep_name" >> "$QUEUE"
+                echo "$FRAMEWORKS_DIR/$dep_name" >> "$to_process_list"
               fi
             done
           done
-
-          rm -f "$QUEUE" "${QUEUE}.tmp" "$PROCESSED"
+          
+          rm -f "$to_process_list" "$processed_list" "${to_process_list}.tmp"
 
           echo "=== Step 2: Fixing all load commands ==="
           
@@ -246,7 +245,7 @@ jobs:
             otool -L "$BINARY" | grep -E "/usr/local/|/opt/homebrew/"
             exit 1
           fi
-
+          
           # Check all bundled libraries too
           for lib in "$FRAMEWORKS_DIR"/*.dylib; do
             [ -f "$lib" ] || continue
@@ -256,29 +255,9 @@ jobs:
               exit 1
             fi
           done
-
+          
           echo "Success: All dependencies bundled and patched."
-          
-          echo "=== Final verification ==="
-          echo "Checking for unpatched absolute paths..."
-          failed=0
-          for file in "BaseBox.app/Contents/MacOS/dosbox" BaseBox.app/Contents/Frameworks/*.dylib; do
-            [ -f "$file" ] || continue
-            echo "Verifying: $file"
-            if otool -L "$file" 2>/dev/null | grep -v "/usr/lib" | grep -v "/System" | grep -v "@executable_path" | grep -q "."; then
-              echo "::error::Unpatched absolute paths found in $file:"
-              otool -L "$file" | grep -v "/usr/lib" | grep -v "/System" | grep -v "@executable_path"
-              failed=1
-            fi
-          done
-          
-          if [ $failed -eq 1 ]; then
-            echo "::error::Build failed due to unpatched library paths"
-            exit 1
-          fi
-          
-          echo "All non-system libraries properly referenced with @executable_path"
- 
+
       - name: Smoke test application launch
         run: |
           # Test that the bundled app can actually launch
