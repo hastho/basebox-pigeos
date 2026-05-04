@@ -195,11 +195,44 @@ jobs:
               dep_name=$(basename "$dep")
               # If we haven't bundled this library yet, copy it
               if [ ! -f "$FRAMEWORKS_DIR/$dep_name" ]; then
-                echo "  Bundling new dep: $dep_name (from $dep)"
-                cp "$dep" "$FRAMEWORKS_DIR/"
-                chmod +w "$FRAMEWORKS_DIR/$dep_name"
-                # Add to queue to process its own deps
-                echo "$FRAMEWORKS_DIR/$dep_name" >> "$to_process_list"
+                # Try to find the library (the exact path from otool might not exist on this arch)
+                found=0
+                # First try the exact path
+                if [ -f "$dep" ]; then
+                  echo "  Bundling new dep: $dep_name (from $dep)"
+                  cp "$dep" "$FRAMEWORKS_DIR/"
+                  chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                  found=1
+                else
+                  # Search in common Homebrew locations
+                  for prefix in /opt/homebrew /usr/local; do
+                    # Try direct path
+                    if [ -f "$prefix/lib/$dep_name" ]; then
+                      echo "  Bundling new dep: $dep_name (from $prefix/lib/$dep_name)"
+                      cp "$prefix/lib/$dep_name" "$FRAMEWORKS_DIR/"
+                      chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                      found=1
+                      break
+                    fi
+                    # Try in opt subdirectory
+                    for opt_dir in "$prefix/opt"/*/; do
+                      if [ -f "${opt_dir}lib/$dep_name" ]; then
+                        echo "  Bundling new dep: $dep_name (from ${opt_dir}lib/$dep_name)"
+                        cp "${opt_dir}lib/$dep_name" "$FRAMEWORKS_DIR/"
+                        chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                        found=1
+                        break 2
+                      fi
+                    done
+                  done
+                fi
+                
+                if [ $found -eq 1 ]; then
+                  # Add to queue to process its own deps
+                  echo "$FRAMEWORKS_DIR/$dep_name" >> "$to_process_list"
+                else
+                  echo "  WARNING: Could not find $dep_name (referenced as: $dep)"
+                fi
               fi
             done
           done
