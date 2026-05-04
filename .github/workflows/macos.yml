@@ -225,8 +225,104 @@ jobs:
             fi
           done
           
+          echo "=== Recursive transitive dependency bundling ==="
+          
+          # Recursive dependency bundler - avoids subshell issues with process substitution
+          FRAMEWORKS_DIR="BaseBox.app/Contents/Frameworks"
+          DEPS_FILE=$(mktemp)
+          PROCESSED_FILE=$(mktemp)
+          echo "BaseBox.app/Contents/MacOS/dosbox" > "$DEPS_FILE"
+          
+          while [ -s "$DEPS_FILE" ]; do
+            # Read first line, remove it from file
+            current_file=$(head -1 "$DEPS_FILE")
+            sed -i '' '1d' "$DEPS_FILE" 2>/dev/null || true
+            
+            # Skip if already processed (avoid loops)
+            grep -q "^$current_file$" "$PROCESSED_FILE" 2>/dev/null && continue
+            echo "$current_file" >> "$PROCESSED_FILE"
+            
+            [ -f "$current_file" ] || continue
+            echo "Checking dependencies of: $current_file"
+            
+            # Get dependencies using process substitution to avoid subshell
+            while read -r dep_line; do
+              [ -z "$dep_line" ] && continue
+              dep_path=$(echo "$dep_line" | awk '{print $1}')
+              dep_name=$(basename "$dep_path")
+              
+              # Skip system libraries and already-correct paths
+              [[ "$dep_path" == /usr/lib/* ]] && continue
+              [[ "$dep_path" == /System/* ]] && continue
+              [[ "$dep_path" == "@executable_path"* ]] && continue
+              [[ "$dep_path" == "@rpath"* ]] && continue
+              [[ "$dep_path" == "@loader_path"* ]] && continue
+              [[ -z "$dep_path" ]] && continue
+              
+              # Check if already bundled
+              if [ -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                # Fix reference if still absolute
+                if [[ "$dep_path" != "@executable_path"* ]]; then
+                  echo "  Fixing reference: $current_file -> $dep_name"
+                  install_name_tool -change "$dep_path" "@executable_path/../Frameworks/$dep_name" "$current_file" 2>/dev/null || true
+                fi
+                continue
+              fi
+              
+              # Try to find the dependency
+              found=""
+              # First try the exact path
+              if [ -f "$dep_path" ]; then
+                echo "  Bundling: $dep_name (from $dep_path)"
+                cp "$dep_path" "$FRAMEWORKS_DIR/"
+                chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                install_name_tool -change "$dep_path" "@executable_path/../Frameworks/$dep_name" "$current_file" 2>/dev/null || true
+                echo "$FRAMEWORKS_DIR/$dep_name" >> "$DEPS_FILE"
+                found=1
+              else
+                # Search in common locations
+                for prefix in /opt/homebrew /usr/local; do
+                  for search_path in "$prefix/lib/$dep_name" "$prefix/opt"/*/lib/"$dep_name"; do
+                    if [ -f "$search_path" ]; then
+                      echo "  Bundling: $dep_name (from $search_path)"
+                      cp "$search_path" "$FRAMEWORKS_DIR/"
+                      chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                      install_name_tool -change "$dep_path" "@executable_path/../Frameworks/$dep_name" "$current_file" 2>/dev/null || true
+                      echo "$FRAMEWORKS_DIR/$dep_name" >> "$DEPS_FILE"
+                      found=1
+                      break 2
+                    fi
+                  done
+                done
+              fi
+              
+              if [ -z "$found" ]; then
+                echo "  WARNING: Could not find: $dep_name (referenced as: $dep_path)"
+              fi
+            done < <(otool -L "$current_file" 2>/dev/null | grep -v "$current_file" | awk '{print $1}')
+          done
+          
+          rm -f "$DEPS_FILE" "$PROCESSED_FILE"
+          
           echo "=== Final verification ==="
-          otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -v "/usr/lib" | grep -v "/System" || echo "All non-system libraries properly referenced"
+          echo "Checking for unpatched absolute paths..."
+          failed=0
+          for file in "BaseBox.app/Contents/MacOS/dosbox" BaseBox.app/Contents/Frameworks/*.dylib; do
+            [ -f "$file" ] || continue
+            echo "Verifying: $file"
+            if otool -L "$file" 2>/dev/null | grep -v "/usr/lib" | grep -v "/System" | grep -v "@executable_path" | grep -q "."; then
+              echo "::error::Unpatched absolute paths found in $file:"
+              otool -L "$file" | grep -v "/usr/lib" | grep -v "/System" | grep -v "@executable_path"
+              failed=1
+            fi
+          done
+          
+          if [ $failed -eq 1 ]; then
+            echo "::error::Build failed due to unpatched library paths"
+            exit 1
+          fi
+          
+          echo "All non-system libraries properly referenced with @executable_path"
  
       - name: Smoke test application launch
         run: |
