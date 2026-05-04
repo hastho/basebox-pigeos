@@ -162,13 +162,14 @@ jobs:
       - name: Bundle and fix library paths
         timeout-minutes: 10
         run: |
-          set -x
+          set -e
           
-          # Create Frameworks directory
-          mkdir -p "BaseBox.app/Contents/Frameworks/"
-          
-          # Library map: "library_basename:homebrew_path_pattern"
-          # We need to handle both x86_64 (/usr/local) and arm64 (/opt/homebrew) paths
+          APP_DIR="BaseBox.app"
+          FRAMEWORKS_DIR="$APP_DIR/Contents/Frameworks"
+          BINARY="$APP_DIR/Contents/MacOS/dosbox"
+          mkdir -p "$FRAMEWORKS_DIR"
+
+          # 1. Define dependencies
           LIBS=(
             "libglib-2.0.0.dylib:glib"
             "libintl.8.dylib:gettext"
@@ -177,159 +178,73 @@ jobs:
             "libopusfile.0.dylib:opusfile"
             "libspeexdsp.1.dylib:speexdsp"
           )
-          
+
+          # 2. Copy and set permissions
           echo "=== Bundling libraries ==="
           for entry in "${LIBS[@]}"; do
             libname="${entry%%:*}"
             pkg="${entry##*:}"
-            
-            # Try to find the library on the current system
-            found=""
             for prefix in /opt/homebrew /usr/local; do
-              path="$prefix/opt/$pkg/lib/$libname"
-              if [ -f "$path" ]; then
-                echo "Found: $path"
-                cp "$path" "BaseBox.app/Contents/Frameworks/$libname"
-                found=1
-                break
+              src="$prefix/opt/$pkg/lib/$libname"
+              if [ -f "$src" ]; then
+                cp "$src" "$FRAMEWORKS_DIR/"
+                chmod +w "$FRAMEWORKS_DIR/$libname"
               fi
             done
-            
-            if [ -z "$found" ]; then
-              echo "WARNING: $libname not found in Homebrew"
-            fi
           done
-          
-          echo "=== Frameworks contents ==="
-          ls -la "BaseBox.app/Contents/Frameworks/"
-          
-          echo "=== Fixing library paths in universal binary ==="
-          # Fix paths for both architectures in the universal binary
-          # x86_64 was built with /usr/local paths, arm64 with /opt/homebrew paths
+
+          # 3. Fix the main binary
+          echo "=== Fixing main binary paths ==="
           for entry in "${LIBS[@]}"; do
             libname="${entry%%:*}"
             pkg="${entry##*:}"
-            
-            # Fix x86_64 path (built on macos-15-intel)
-            old_path_x86="/usr/local/opt/$pkg/lib/$libname"
-            if otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -q "$old_path_x86"; then
-              echo "Fixing x86_64 path: $old_path_x86 -> @executable_path/../Frameworks/$libname"
-              install_name_tool -change "$old_path_x86" "@executable_path/../Frameworks/$libname" "BaseBox.app/Contents/MacOS/dosbox"
-            fi
-            
-            # Fix arm64 path (built on macos-15)
-            old_path_arm="/opt/homebrew/opt/$pkg/lib/$libname"
-            if otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -q "$old_path_arm"; then
-              echo "Fixing arm64 path: $old_path_arm -> @executable_path/../Frameworks/$libname"
-              install_name_tool -change "$old_path_arm" "@executable_path/../Frameworks/$libname" "BaseBox.app/Contents/MacOS/dosbox"
-            fi
+            # Redirect both possible Homebrew prefixes to the bundle
+            install_name_tool -change "/usr/local/opt/$pkg/lib/$libname" "@executable_path/../Frameworks/$libname" "$BINARY" || true
+            install_name_tool -change "/opt/homebrew/opt/$pkg/lib/$libname" "@executable_path/../Frameworks/$libname" "$BINARY" || true
           done
-          
-          echo "=== Recursive transitive dependency bundling ==="
-          
-          FRAMEWORKS_DIR="BaseBox.app/Contents/Frameworks"
-          
-          # First, copy any missing direct dependencies
-          for entry in "${LIBS[@]}"; do
-            libname="${entry%%:*}"
-            pkg="${entry##*:}"
-            if [ ! -f "$FRAMEWORKS_DIR/$libname" ]; then
-              for prefix in /opt/homebrew /usr/local; do
-                if [ -f "$prefix/opt/$pkg/lib/$libname" ]; then
-                  echo "Copying: $libname from $prefix/opt/$pkg/lib/$libname"
-                  cp "$prefix/opt/$pkg/lib/$libname" "$FRAMEWORKS_DIR/"
-                  break
-                fi
-              done
-            fi
-          done
-          
-          # Make all bundled libraries writable
-          chmod +w "$FRAMEWORKS_DIR"/*.dylib 2>/dev/null || true
-          chmod +w "BaseBox.app/Contents/MacOS/dosbox" 2>/dev/null || true
-          
-          # Function to get deps of a file (avoids subshell)
-          get_deps() {
-            otool -L "$1" 2>/dev/null | grep -v "$(basename "$1")" | awk '{print $1}'
-          }
-          
-          # Function to fix one file's dependencies
-          fix_file_deps() {
-            local target="$1"
-            [ -f "$target" ] || return 0
-            
-            echo "Processing: $target"
-            
-            # Get deps into temp file to avoid subshell
-            local deps_file=$(mktemp)
-            get_deps "$target" > "$deps_file"
-            
-            while read -r dep_path; do
-              [ -z "$dep_path" ] && continue
-              
-              # Skip system libs and already-fixed paths
-              [[ "$dep_path" == /usr/lib/* ]] && continue
-              [[ "$dep_path" == /System/* ]] && continue
-              [[ "$dep_path" == @executable_path* ]] && continue
-              [[ "$dep_path" == @rpath* ]] && continue
-              [[ "$dep_path" == @loader_path* ]] && continue
-              
-              local dep_name=$(basename "$dep_path")
-              
-              # Bundle if missing
-              if [ ! -f "$FRAMEWORKS_DIR/$dep_name" ]; then
-                local found=0
-                # Try exact path
-                if [ -f "$dep_path" ]; then
-                  echo "  Bundling: $dep_name"
-                  cp "$dep_path" "$FRAMEWORKS_DIR/"
-                  chmod +w "$FRAMEWORKS_DIR/$dep_name"
-                  found=1
-                else
-                  # Search common locations
-                  for prefix in /opt/homebrew /usr/local; do
-                    for search in "$prefix/lib/$dep_name" "$prefix/opt"/*/lib/"$dep_name"; do
-                      if [ -f "$search" ]; then
-                        echo "  Bundling: $dep_name from $search"
-                        cp "$search" "$FRAMEWORKS_DIR/"
-                        chmod +w "$FRAMEWORKS_DIR/$dep_name"
-                        found=1
-                        break 2
-                      fi
-                    done
-                  done
-                fi
-                
-                if [ $found -eq 0 ]; then
-                  echo "  WARNING: Could not find $dep_name (referenced as: $dep_path)"
-                  continue
-                fi
+
+          # 4. RECURSIVE FIX: Clean up nested dependencies inside Frameworks
+          echo "=== Recursively fixing Frameworks contents ==="
+          bundled_libs=$(find "$FRAMEWORKS_DIR" -name "*.dylib")
+          for lib in $bundled_libs; do
+            echo "Processing $lib..."
+            # Find any link pointing to a Homebrew opt path
+            deps=$(otool -L "$lib" | grep -E "/usr/local/opt/|/opt/homebrew/opt/" | awk '{print $1}')
+            for dep in $deps; do
+              dep_name=$(basename "$dep")
+              if [ -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                echo "  Redirecting $dep -> @executable_path/../Frameworks/$dep_name"
+                install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$lib"
               fi
-              
-              # Fix the reference
-              echo "  Fixing: $target -> $dep_name"
-              install_name_tool -change "$dep_path" "@executable_path/../Frameworks/$dep_name" "$target"
-            done < "$deps_file"
-            
-            rm -f "$deps_file"
-          }
-          export -f fix_file_deps
-          export FRAMEWORKS_DIR
-          
-          # Fix dosbox first
-          fix_file_deps "BaseBox.app/Contents/MacOS/dosbox"
-          
-          # Iteratively fix all bundled libraries
-          for iteration in 1 2 3 4 5; do
-            echo "=== Iteration $iteration ==="
-            for lib in "$FRAMEWORKS_DIR"/*.dylib; do
-              [ -f "$lib" ] || continue
-              fix_file_deps "$lib"
             done
+            # Fix the ID of the library itself to be relative
+            lib_id_path=$(otool -D "$lib" | sed -n '2p')
+            lib_id_name=$(basename "$lib_id_path")
+            install_name_tool -id "@executable_path/../Frameworks/$lib_id_name" "$lib"
+          done
+
+          # 5. Verification
+          echo "=== Final verification ==="
+          echo "Main binary paths:"
+          otool -L "$BINARY" | grep -E "libglib|libintl|libpng|libSDL" || echo "All paths are relative"
+          
+          echo "=== Check for unpatched paths ==="
+          failed=0
+          for file in "$BINARY" $bundled_libs; do
+            [ -f "$file" ] || continue
+            if otool -L "$file" 2>/dev/null | grep -E "/usr/local/|/opt/homebrew/" | grep -v "@executable_path"; then
+              echo "::error::Unpatched absolute paths in $(basename "$file"):"
+              otool -L "$file" | grep -E "/usr/local/|/opt/homebrew/"
+              failed=1
+            fi
           done
           
-          # Make libraries read-only again
-          chmod -w "$FRAMEWORKS_DIR"/*.dylib 2>/dev/null || true
+          if [ $failed -eq 1 ]; then
+            echo "::error::Build failed - unpatched library paths found"
+            exit 1
+          fi
+          
+          echo "All libraries properly referenced with @executable_path"
           
           echo "=== Final verification ==="
           echo "Checking for unpatched absolute paths..."
