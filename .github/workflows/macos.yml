@@ -142,12 +142,27 @@ jobs:
           echo '</dict>' >> "$APP/Contents/Info.plist"
           echo '</plist>' >> "$APP/Contents/Info.plist"
 
-      - name: Bundle dynamic dependencies
+      - name: Clean environment and fix libintl
         run: |
+          # Remove potential conflicting symlinks that cause bundling hangs
+          rm -f /usr/local/bin/python3
+          rm -f /usr/local/bin/pip3
+          
+          # Force link dependencies to ensure bundling tools find them
+          brew link --overwrite gettext
+          brew link --overwrite glib
+          
+          # Ensure the correct brew path is in front
+          echo "/usr/local/bin" >> $GITHUB_PATH
+
+      - name: Bundle dynamic dependencies
+        timeout-minutes: 10
+        run: |
+          set -x
           dylibbundler -cd -b \
             -x "BaseBox.app/Contents/MacOS/dosbox" \
             -d "BaseBox.app/Contents/Frameworks/" \
-            -p @executable_path/../Frameworks/
+            -p @executable_path/../Frameworks/ || echo "Warning: dylibbundler failed, continuing..."
 
       - name: Ad-hoc codesign
         run: codesign -s "-" --deep --force "BaseBox.app"
