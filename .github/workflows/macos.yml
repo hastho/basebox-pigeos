@@ -57,11 +57,11 @@ jobs:
           BUILD_DIR="build-${{ matrix.conf.arch }}"
           
           # Set rpath so dylibbundler can rewrite @rpath references
-          export LDFLAGS="-Wl,-rpath,@executable_path/../Frameworks"
-          
+          # Use cpp_link_args to ensure Meson passes it to linker
           meson setup "$BUILD_DIR" \
             -Dbuildtype=release \
-            -Dstrip=true
+            -Dstrip=true \
+            -Dcpp_link_args="-Wl,-rpath,@executable_path/../Frameworks"
           
           meson compile -C "$BUILD_DIR"
 
