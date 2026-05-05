@@ -35,8 +35,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install python@3.14 || true
-          brew link --overwrite python@3.14
+          brew install python@3.13 || true
+          brew link --overwrite python@3.13
           brew install meson ninja glib gettext sdl2 libpng opusfile speexdsp
 
       - name: Build with Meson
@@ -92,8 +92,8 @@ jobs:
       - name: Install brew dependencies
         run: |
           brew install dylibbundler
-          brew install python@3.14 || true
-          brew link --overwrite python@3.14
+          brew install python@3.13 || true
+          brew link --overwrite python@3.13
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --overwrite librsvg
 
       - name: Create universal binary
