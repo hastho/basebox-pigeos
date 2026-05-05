@@ -699,9 +699,11 @@ libiir_dep = dependency(
     include_type: 'system',
 )
 
+# opusfile uses autotools (no Meson build), so system library only
 opus_dep = dependency(
     'opusfile',
     version: ['>= 0.8', '< 1'],
+    required: false,
     static: ('opusfile' in static_libs_list or prefers_static_libs),
     include_type: 'system',
 )
@@ -738,183 +740,30 @@ sdl2_dep = dependency(
 
 # zlib
 # ~~~~
-zlib_provider = 'none'
-zlib_ng_provider = 'none'
-
-zlib_dep = disabler()
-zlib_is_static = 'zlib' in static_libs_list or prefers_static_libs
-
-zlib_ng_is_allowed = 'false' not in zlib_ng_options
-if not zlib_ng_is_allowed
-    zlib_ng_provider = 'disabled'
-endif
-
-# Try using the system-provided zlib-ng library so long as the wrap isn't
-# forced. Using the system-provided library is a free upgrade for all the build
-# types, so we always prefer this first if the user allows it.
-#
-try_system_zlib_ng = (
-    zlib_ng_is_allowed
-    and not wraps_forced
-    and 'zlib-ng' not in get_option('force_fallback_for')
+# Note: zlib-ng wrap disabled - requires CMake which may not be available.
+# Use system zlib for maximum compatibility across platforms.
+zlib_dep = dependency(
+    'zlib',
+    version: ['>= 1.2.11', '< 2'],
+    required: true,
+    fallback: [],
+    static: 'zlib' in static_libs_list or prefers_static_libs,
+    include_type: 'system',
 )
+zlib_provider = zlib_dep.found() ? 'system library' : 'none'
 
-# The zlib-ng wrap, on the other hand, is a costly endeavour because it
-# single-handedly quadruples the 'meson setup' time for the entire project (6.1s
-# to 25.8s) due to the use of the much slower CMake build system, therefore we
-# only expend this effort (to optimize zlib) for commensurate optimized builds.
-# This nuance is also explained in meson_options.txt for packagers.
-#
-try_builtin_zlib_ng = (
-    zlib_ng_is_allowed
-    and (not wraps_disabled
-    or 'zlib-ng' in get_option('force_fallback_for'))
-)
-
-system_zlib_ng_dep = disabler()
-if try_system_zlib_ng
-    system_zlib_ng_dep = dependency(
-        'zlib-ng',
-        required: false,
-        fallback: [],
-        static: zlib_is_static,
-        include_type: 'system',
-    )
-    if (system_zlib_ng_dep.found())
-        zlib_ng_provider = 'system library'
-        conf_data.set10('C_SYSTEM_ZLIB_NG', true)
-        try_builtin_zlib_ng = false
-    else
-        zlib_ng_provider = 'skipped (system library not found)'
-    endif
-endif
-
-# We only justify the extra time to setup zlib-ng (using CMake) if
-# the user wants an optimized build, so check if we can skip it:
-#
-if try_builtin_zlib_ng and not is_optimized_buildtype
-    zlib_ng_provider = 'skipped (non-optimized build)'
-    try_builtin_zlib_ng = false
-endif
-
-# Meson needs to be new enough to setup the zlib-ng CMake project, so
-# check if Meson is too old:
-#
-if try_builtin_zlib_ng and meson.version() < '1.3.0'
-    zlib_ng_provider = 'skipped (meson is < 1.3.0)'
-    try_builtin_zlib_ng = false
-endif
-
-# CMake needs to be available both on the host and in Meson as a module to
-# setup the zlib-ng CMake project, so check if we're missing either:
-#
-cmake_module = disabler()
-if try_builtin_zlib_ng
-    cmake_bin = find_program('cmake', required: false)
-    cmake_module = import('cmake', required: false)
-    if not cmake_bin.found()
-        zlib_ng_provider = 'skipped (CMake not found)'
-        try_builtin_zlib_ng = false
-
-    elif not cmake_module.found()
-        zlib_ng_provider = 'skipped (Meson\'s CMake module not found)'
-        try_builtin_zlib_ng = false
-    endif
-endif
-
-# If we passed all the above checks, everything is in place to use the wrap!
-if try_builtin_zlib_ng
-    cmake_options = cmake_module.subproject_options()
-
-    zlib_ng_defines = {
-        'ZLIB_COMPAT': true,
-        'WITH_OPTIM': true,
-        'ZLIB_BUILD_STATIC': true,
-        'PIC': get_option('b_staticpic'),
-        'BUILD_SHARED_LIBS': false,
-        'WITH_GTEST': false,
-        'ZLIB_ENABLE_TESTS': false,
-        'WITH_NATIVE_INSTRUCTIONS': zlib_ng_is_native,
-        'WITH_SANITIZER': get_option('b_sanitize'),
-        'CMAKE_C_FLAGS': ' '.join(cc_supported_arguments),
-    }
-
-    foreach instruction_set : [
-        'avx2',
-        'avx512',
-        'avx512vnni',
-        'sse2',
-        'ssse3',
-        'sse42',
-        'pclmulqdq',
-        'vpclmulqdq',
-        'acle',
-        'neon',
-        'armv6',
-        'altivec',
-        'power8',
-        'rvv',
-        'crc32_vx',
-        'dfltcc_deflate',
-        'dfltcc_inflate',
-    ]
-        cmake_define_key = 'WITH_' + instruction_set.to_upper()
-        cmake_define_value = (
-            zlib_ng_is_native
-            or zlib_ng_options.contains(instruction_set)
-        )
-        zlib_ng_defines += {cmake_define_key: cmake_define_value}
-    endforeach
-
-    cmake_options.add_cmake_defines(zlib_ng_defines)
-
-    zlib_ng_subproject = cmake_module.subproject(
-        'zlib-ng',
-        options: cmake_options,
-    )
-    zlib_ng_provider = 'built-in'
-
-    # We configure zlib-ng to be a drop in replacement for zlib, so we
-    # can directly assign the zlib_dep from the zlib-ng subproject:
-    #
-    zlib_dep = zlib_ng_subproject.get_variable('zlib_dep')
-    zlib_provider = 'built-in (zlib-ng)'
-endif
-
-# Otherwise use the system's zlib
-if not zlib_dep.found()
-    zlib_dep = dependency(
-        'zlib',
-        version: ['>= 1.2.11', '< 2'],
-        required: true,
-        fallback: [],
-        static: zlib_is_static,
-        include_type: 'system',
-    )
-    zlib_provider = 'system library'
-endif
-
-summary('zlib-ng provider', zlib_ng_provider)
 summary('zlib provider', zlib_provider)
 
 # PNG
 # ~~~
-png_has_internal_dep = zlib_dep.type_name() == 'internal'
-if png_has_internal_dep
-    png_dep = subproject(
-        'libpng',
-        default_options: default_wrap_options,
-    ).get_variable('png_dep')
-else
-    png_dep = dependency(
-        'libpng',
-        version: ['>= 1.2', '< 2'],
-        required: true,
-        fallback: [],
-        static: 'png' in static_libs_list or prefers_static_libs,
-        include_type: 'system',
-    )
-endif
+png_dep = dependency(
+    'libpng',
+    version: ['>= 1.2', '< 2'],
+    required: true,
+    fallback: ['libpng', 'png_dep'],
+    static: 'png' in static_libs_list or prefers_static_libs,
+    include_type: 'system',
+)
 summary(
     'PNG provider',
     png_dep.type_name() == 'internal' ? 'built-in' : 'system library',
@@ -922,12 +771,11 @@ summary(
 
 # SpeexDSP
 # ~~~~~~~~
-# Default to the system library
+# First try system library (needed for cxx.run() test which requires external dep)
 speexdsp_dep = dependency(
     'speexdsp',
     version: ['>= 1.2', '< 2'],
     required: false,
-    fallback: [],
     static: ('speexdsp' in static_libs_list or prefers_static_libs),
     include_type: 'system',
 )
@@ -935,8 +783,11 @@ speexdsp_dep = dependency(
 # The library needs to be available and testable to be trusted
 can_trust_system_speexdsp = (
     speexdsp_dep.found()
+    and speexdsp_dep.type_name() == 'pkgconfig'
     and meson.can_run_host_binaries()
 )
+
+speexdsp_summary_msg = 'not found'
 
 # Test the library. Trust is dropped if the test fails.
 if can_trust_system_speexdsp
@@ -956,10 +807,13 @@ endif
 
 # Use the wrap if the system doesn't have SpeexDSP, we couldn't test it, or testing failed
 if not can_trust_system_speexdsp
-    speexdsp_dep = subproject(
+    speexdsp_dep = dependency(
         'speexdsp',
+        version: ['>= 1.2', '< 2'],
+        fallback: ['speexdsp', 'speexdsp_dep'],
         default_options: default_wrap_options,
-    ).get_variable('speexdsp_dep')
+        static: ('speexdsp' in static_libs_list or prefers_static_libs),
+    )
     speexdsp_summary_msg = 'built-in'
 endif
 summary('SpeexDSP provider', speexdsp_summary_msg)
@@ -974,6 +828,7 @@ have_fd_zero = (
 )
 
 # SDL Networking
+# Note: SDL2_net wrap doesn't properly provide dependency, using system package
 sdl2_net_dep = optional_dep
 sdl2_net_summary_msg = 'Disabled'
 if get_option('use_sdl2_net')
@@ -1002,6 +857,7 @@ if get_option('use_slirp')
     libslirp_dep = dependency(
         'slirp',
         version: ['>= 4.6.1', '< 5'],
+        fallback: ['slirp', 'libslirp_dep'],
         default_options: default_wrap_options,
         static: ('slirp' in static_libs_list or prefers_static_libs),
         not_found_message: msg.format('use_slirp'),
@@ -1033,6 +889,7 @@ if get_option('use_fluidsynth')
         'fluidsynth',
         version: ['>= 2.2.3', '< 3'],
         modules: ['FluidSynth::libfluidsynth'],
+        fallback: ['fluidsynth', 'fluidsynth_dep'],
         static: ('fluidsynth' in static_libs_list or prefers_static_libs),
         not_found_message: msg.format('use_fluidsynth'),
         default_options: [
@@ -1055,6 +912,7 @@ if get_option('use_mt32emu')
     mt32emu_dep = dependency(
         'mt32emu',
         version: ['>= 2.5.3', '< 3'],
+        fallback: ['mt32emu', 'mt32emu_dep'],
         default_options: default_wrap_options,
         static: ('mt32emu' in static_libs_list or prefers_static_libs),
         not_found_message: msg.format('use_mt32emu'),
@@ -1069,6 +927,7 @@ if get_option('tracy')
     tracy_dep = dependency(
         'tracy',
         version: ['>= 0.10', '< 1'],
+        fallback: ['tracy', 'tracy_dep'],
         default_options: default_wrap_options,
         static: ('tracy' in static_libs_list or prefers_static_libs),
         not_found_message: msg.format('tracy'),

@@ -102,7 +102,7 @@ jobs:
           fi
 
       - name: Meson setup
-        run: meson setup build --wrap-mode=forcefallback ${{ matrix.conf.build_flags }} || (cat build/meson-logs/meson-log.txt && exit 1)
+        run: meson setup build --wrap-mode=forcefallback ${{ matrix.conf.build_flags }} -Duse_fluidsynth=false -Duse_mt32emu=false || (cat build/meson-logs/meson-log.txt && exit 1)
 
       - name: Build
         run: meson compile -C build
@@ -138,6 +138,8 @@ jobs:
             -Ddefault_library=static \
             --wrap-mode=forcefallback \
             -Db_lto=true -Dbuildtype=release \
+            -Duse_fluidsynth=false \
+            -Duse_mt32emu=false \
             || (cat build/meson-logs/meson-log.txt && exit 1)
 
       - name: Build & Package

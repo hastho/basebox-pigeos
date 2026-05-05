@@ -58,10 +58,15 @@ jobs:
           
           # Set rpath so dylibbundler can rewrite @rpath references
           # Use cpp_link_args to ensure Meson passes it to linker
+          # Force wraps to avoid Homebrew dependency hell
+          # Disable FluidSynth and MT32Emu for PC-GEOS (not needed)
           meson setup "$BUILD_DIR" \
             -Dbuildtype=release \
             -Dstrip=true \
-            -Dcpp_link_args="-Wl,-rpath,@executable_path/../Frameworks"
+            -Dcpp_link_args="-Wl,-rpath,@executable_path/../Frameworks" \
+            --wrap-mode=forcefallback \
+            -Duse_fluidsynth=false \
+            -Duse_mt32emu=false
           
           meson compile -C "$BUILD_DIR"
 
