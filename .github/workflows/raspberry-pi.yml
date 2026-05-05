@@ -19,8 +19,8 @@ on:
 
 jobs:
   build-pi:
-    name: Build for Raspberry Pi (ARMv7/ARM64)
-    runs-on: [self-hosted, linux, ARM]
+    name: Build for Raspberry Pi (ARM64)
+    runs-on: [self-hosted, linux, ARM64]
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
