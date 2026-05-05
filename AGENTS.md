@@ -80,6 +80,7 @@ BaseBox uses Meson wraps for maximum platform compatibility (Raspberry Pi, Debia
 - **tracy**: Wrap available (`fallback: ['tracy', 'tracy_dep']`)
 
 ### Build Flags for PC-GEOS
+
 ```shell
 # macOS: Force wraps to avoid Homebrew dependency hell
 meson setup build --wrap-mode=forcefallback \
