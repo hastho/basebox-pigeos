@@ -104,11 +104,13 @@ meson setup build -Duse_fluidsynth=false -Duse_mt32emu=false
 - [x] ~~Port --wrap-mode=forcefallback to macos.yml~~ (CANCELED: Python 3.14/3.13 + glib 2.78.0 distutils issue)
 - [x] ~~Simplify macos.yml (remove Homebrew install steps)~~ (CANCELED)
 - [x] ~~Remove dylibbundler dependency in macOS workflow~~ (CANCELED)
-- [ ] Update actions/checkout@v4 to Node.js 24 version (warning shown)
-- [ ] Modify linux.yml to provide proper APT packages for Raspberry Pi
+- [x] Update actions/checkout@v4 to Node.js 24 version (actions/checkout@v6)
+- [x] Modify linux.yml to provide proper APT packages for Raspberry Pi
 - [x] Create raspberry-pi-apt.txt packages file
-- [x] Create raspberry-pi.yml workflow (basic structure)
-- [ ] Research best runner for Raspberry Pi (local Pi 4 vs hosted)
+- [x] Create raspberry-pi.yml workflow (self-hosted, ARM64)
+- [x] Research best runner for Raspberry Pi: Local Pi 4 recommended
+- [ ] Setup self-hosted runner on local Pi 4
+- [ ] Test raspberry-pi.yml workflow on Pi 4
 
 ## PC-GEOS Feature Configuration
 
