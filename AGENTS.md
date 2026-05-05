@@ -95,12 +95,14 @@ meson setup build -Duse_fluidsynth=false -Duse_mt32emu=false
 - [x] Simplify zlib to system-only
 - [x] Add fallback support to all dependencies in meson.build
 - [x] Fix src/libs/zmbv/meson.build (remove system_zlib_ng_dep reference)
-- [x] Update macos.yml with -Duse_fluidsynth=false -Duse_mt32emu=false
-- [x] Update linux.yml with flags for build and build_release jobs
-- [x] Test meson setup with --wrap-mode=forcefallback
+- [x] Test meson setup with --wrap-mode=forcefallback (local: 1667 targets)
 - [x] Compile and verify build works
-- [x] Commit changes to Git
-- [ ] Simplify macos.yml (remove Homebrew install steps after wraps work)
+- [x] Commit changes to Git (v0.82.0-pigeos.76)
+- [x] Tag v0.82.0-pigeos.76 (meson wraps + reverted GH actions)
+- [x] Fix actions/cache@v4 on main (was v3.3.2 deprecated)
+- [x] All GH actions pass on main with v76 tag
+- [ ] Port --wrap-mode=forcefallback to macos.yml (blocked: Python 3.14/3.13 issues)
+- [ ] Simplify macos.yml (remove Homebrew install steps)
 - [ ] Remove dylibbundler dependency in macOS workflow (static linking)
 - [ ] Test full workflow on macOS to verify static linking
 
