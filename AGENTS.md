@@ -101,10 +101,9 @@ meson setup build -Duse_fluidsynth=false -Duse_mt32emu=false
 - [x] Tag v0.82.0-pigeos.76 (meson wraps + reverted GH actions)
 - [x] Fix actions/cache@v4 on main (was v3.3.2 deprecated)
 - [x] All GH actions pass on main with v76 tag
-- [ ] Port --wrap-mode=forcefallback to macos.yml (blocked: Python 3.14/3.13 issues)
-- [ ] Simplify macos.yml (remove Homebrew install steps)
-- [ ] Remove dylibbundler dependency in macOS workflow (static linking)
-- [ ] Test full workflow on macOS to verify static linking
+- [x] ~~Port --wrap-mode=forcefallback to macos.yml~~ (CANCELED: Python 3.14/3.13 + glib 2.78.0 distutils issue)
+- [x] ~~Simplify macos.yml (remove Homebrew install steps)~~ (CANCELED)
+- [x] ~~Remove dylibbundler dependency in macOS workflow~~ (CANCELED)
 
 ## PC-GEOS Feature Configuration
 
