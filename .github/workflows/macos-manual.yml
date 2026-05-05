@@ -1,0 +1,337 @@
+name: macOS Manual Build
+permissions:
+  contents: write
+  pull-requests: read
+  actions: read
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_macos:
+    name: Build (${{ matrix.conf.arch }})
+    runs-on: ${{ matrix.conf.host }}
+    timeout-minutes: 90
+    strategy:
+      matrix:
+        conf:
+          - host: macos-15-intel
+            arch: x86_64
+            max_warnings: 0
+          - host: macos-15
+            arch: arm64
+            max_warnings: 0
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Install dependencies
+        run: |
+          brew install python@3.14 || true
+          brew link --overwrite python@3.14
+          brew install meson ninja glib gettext sdl2 libpng opusfile speexdsp
+
+      - name: Build with Meson
+        run: |
+          set -xo pipefail
+          BUILD_DIR="build-${{ matrix.conf.arch }}"
+          
+          # Set rpath so dylibbundler can rewrite @rpath references
+          # Use cpp_link_args to ensure Meson passes it to linker
+          # Force wraps to avoid Homebrew dependency hell
+          # Disable FluidSynth and MT32Emu for PC-GEOS (not needed)
+          meson setup "$BUILD_DIR" \
+            -Dbuildtype=release \
+            -Dstrip=true \
+            -Dcpp_link_args="-Wl,-rpath,@executable_path/../Frameworks" \
+            --wrap-mode=forcefallback \
+            -Duse_fluidsynth=false \
+            -Duse_mt32emu=false
+          
+          meson compile -C "$BUILD_DIR"
+
+      - name: Upload per-arch binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: dosbox-${{ matrix.conf.arch }}
+          path: build-${{ matrix.conf.arch }}/dosbox
+          overwrite: true
+
+  publish_universal:
+    name: Publish Universal Build
+    needs: build_macos
+    runs-on: macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Set version variables
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION="nightly-$(git rev-parse --short HEAD)"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION_HASH=${VERSION}-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Download per-arch binaries
+        uses: actions/download-artifact@v8
+
+      - name: Install brew dependencies
+        run: |
+          brew install dylibbundler
+          brew install python@3.14 || true
+          brew link --overwrite python@3.14
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --overwrite librsvg
+
+      - name: Create universal binary
+        run: |
+          lipo -create dosbox-x86_64/dosbox dosbox-arm64/dosbox \
+            -output dosbox-universal
+          chmod +x dosbox-universal
+          lipo -info dosbox-universal
+
+      - name: Build valid .app bundle
+        run: |
+          APP="BaseBox.app"
+          BINARY="dosbox"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources"
+          cp dosbox-universal "$APP/Contents/MacOS/$BINARY"
+
+          # Copy icon if available
+          if [ -f "contrib/icons/macos/dosbox-staging.icns" ]; then
+            cp "contrib/icons/macos/dosbox-staging.icns" "$APP/Contents/Resources/AppIcon.icns"
+            ICON_LINE="  <key>CFBundleIconFile</key>\n  <string>AppIcon</string>"
+          else
+            ICON_LINE=""
+          fi
+
+          # Copy resources
+          if [ -d "contrib/resources" ]; then
+            cp -R contrib/resources/* "$APP/Contents/Resources/" 2>/dev/null || true
+          fi
+
+          # Create Info.plist with icon reference
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > "$APP/Contents/Info.plist"
+          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> "$APP/Contents/Info.plist"
+          echo '<plist version="1.0">' >> "$APP/Contents/Info.plist"
+          echo '<dict>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundleExecutable</key>' >> "$APP/Contents/Info.plist"
+          echo '  <string>dosbox</string>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundleIdentifier</key>' >> "$APP/Contents/Info.plist"
+          echo '  <string>com.basebox.app</string>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundleName</key>' >> "$APP/Contents/Info.plist"
+          echo '  <string>BaseBox</string>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundlePackageType</key>' >> "$APP/Contents/Info.plist"
+          echo '  <string>APPL</string>' >> "$APP/Contents/Info.plist"
+          echo '  <key>CFBundleShortVersionString</key>' >> "$APP/Contents/Info.plist"
+          echo "  <string>${{ env.VERSION }}</string>" >> "$APP/Contents/Info.plist"
+          echo '  <key>NSHighResolutionCapable</key>' >> "$APP/Contents/Info.plist"
+          echo '  <true/>' >> "$APP/Contents/Info.plist"
+          if [ -n "$ICON_LINE" ]; then
+            echo -e "$ICON_LINE" >> "$APP/Contents/Info.plist"
+          fi
+          echo '</dict>' >> "$APP/Contents/Info.plist"
+          echo '</plist>' >> "$APP/Contents/Info.plist"
+
+      - name: Force link glib for bundler
+        run: |
+          brew link --overwrite glib gettext
+          # Verify the files actually exist where dylibbundler wants them
+          ls -l /usr/local/opt/glib/lib/libglib-2.0.0.dylib || true
+          ls -l /usr/local/opt/gettext/lib/libintl.dylib || true
+
+      - name: Bundle and fix library paths
+        timeout-minutes: 10
+        run: |
+          set -e
+          
+          APP_DIR="BaseBox.app"
+          FRAMEWORKS_DIR="$APP_DIR/Contents/Frameworks"
+          BINARY="$APP_DIR/Contents/MacOS/dosbox"
+          mkdir -p "$FRAMEWORKS_DIR"
+
+          echo "=== Step 1: Recursively collecting all dependencies ==="
+          # Initial seed: start with the main binary
+          to_process_list=$(mktemp)
+          echo "$BINARY" > "$to_process_list"
+          
+          processed_list=$(mktemp)
+          
+          while [ -s "$to_process_list" ]; do
+            current=$(head -n 1 "$to_process_list")
+            # Remove first line
+            tail -n +2 "$to_process_list" > "${to_process_list}.tmp" && mv "${to_process_list}.tmp" "$to_process_list"
+            
+            # Skip if already processed
+            grep -q "^$current$" "$processed_list" 2>/dev/null && continue
+            echo "$current" >> "$processed_list"
+            
+            [ -f "$current" ] || continue
+            echo "Processing: $current"
+            
+            # Find any Homebrew paths linked in this file
+            deps=$(otool -L "$current" 2>/dev/null | grep -E "/usr/local/|/opt/homebrew/" | awk '{print $1}')
+            
+            for dep in $deps; do
+              dep_name=$(basename "$dep")
+              # If we haven't bundled this library yet, copy it
+              if [ ! -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                # Try to find the library (the exact path from otool might not exist on this arch)
+                found=0
+                # First try the exact path
+                if [ -f "$dep" ]; then
+                  echo "  Bundling new dep: $dep_name (from $dep)"
+                  cp "$dep" "$FRAMEWORKS_DIR/"
+                  chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                  found=1
+                else
+                  # Search in common Homebrew locations
+                  for prefix in /opt/homebrew /usr/local; do
+                    # Try direct path
+                    if [ -f "$prefix/lib/$dep_name" ]; then
+                      echo "  Bundling new dep: $dep_name (from $prefix/lib/$dep_name)"
+                      cp "$prefix/lib/$dep_name" "$FRAMEWORKS_DIR/"
+                      chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                      found=1
+                      break
+                    fi
+                    # Try in opt subdirectory
+                    for opt_dir in "$prefix/opt"/*/; do
+                      if [ -f "${opt_dir}lib/$dep_name" ]; then
+                        echo "  Bundling new dep: $dep_name (from ${opt_dir}lib/$dep_name)"
+                        cp "${opt_dir}lib/$dep_name" "$FRAMEWORKS_DIR/"
+                        chmod +w "$FRAMEWORKS_DIR/$dep_name"
+                        found=1
+                        break 2
+                      fi
+                    done
+                  done
+                fi
+                
+                if [ $found -eq 1 ]; then
+                  # Add to queue to process its own deps
+                  echo "$FRAMEWORKS_DIR/$dep_name" >> "$to_process_list"
+                else
+                  echo "  WARNING: Could not find $dep_name (referenced as: $dep)"
+                fi
+              fi
+            done
+          done
+          
+          rm -f "$to_process_list" "$processed_list" "${to_process_list}.tmp"
+
+          echo "=== Step 2: Fixing all load commands ==="
+          
+          # Get list of all bundled libraries
+          all_targets="$BINARY"
+          for lib in "$FRAMEWORKS_DIR"/*.dylib; do
+            [ -f "$lib" ] && all_targets="$all_targets $lib"
+          done
+          
+          for target in $all_targets; do
+            [ -f "$target" ] || continue
+            echo "Patching: $target"
+            
+            # Get deps that need fixing
+            deps=$(otool -L "$target" 2>/dev/null | grep -E "/usr/local/|/opt/homebrew/" | awk '{print $1}')
+            
+            for dep in $deps; do
+              dep_name=$(basename "$dep")
+              if [ -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                echo "  Redirecting: $dep -> @executable_path/../Frameworks/$dep_name"
+                install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$target"
+              fi
+            done
+            
+            # If it's a dylib, fix its internal ID
+            if [[ "$target" == *.dylib ]]; then
+              lib_id=$(basename "$target")
+              install_name_tool -id "@executable_path/../Frameworks/$lib_id" "$target"
+            fi
+          done
+
+          echo "=== Step 3: Ad-hoc signing ==="
+          codesign --force --deep --sign - "$APP_DIR"
+
+          echo "=== Step 4: Final verification ==="
+          if otool -L "$BINARY" | grep -E "/usr/local/|/opt/homebrew/" | grep -qv "@executable_path"; then
+            echo "Error: Absolute paths still remain in binary!"
+            otool -L "$BINARY" | grep -E "/usr/local/|/opt/homebrew/"
+            exit 1
+          fi
+          
+          # Check all bundled libraries too
+          for lib in "$FRAMEWORKS_DIR"/*.dylib; do
+            [ -f "$lib" ] || continue
+            if otool -L "$lib" | grep -E "/usr/local/|/opt/homebrew/" | grep -qv "@executable_path"; then
+              echo "Error: Absolute paths still remain in $(basename $lib)!"
+              otool -L "$lib" | grep -E "/usr/local/|/opt/homebrew/"
+              exit 1
+            fi
+          done
+          
+          echo "Success: All dependencies bundled and patched."
+
+      - name: Smoke test application launch
+        run: |
+          # Test that the bundled app can actually launch
+          # SDL_VIRTUALDRIVER=dummy allows headless execution
+          SDL_VIRTUALDRIVER=dummy ./BaseBox.app/Contents/MacOS/dosbox --version 2>&1
+          exit_code=$?
+          if [ $exit_code -eq 0 ]; then
+            echo "App launched successfully (exit code: $exit_code)"
+          else
+            echo "FAILURE: App failed to launch (exit code: $exit_code)"
+            echo "=== Library diagnostics ==="
+            otool -L "BaseBox.app/Contents/MacOS/dosbox"
+            echo "=== Frameworks contents ==="
+            ls -la "BaseBox.app/Contents/Frameworks/"
+            exit 1
+          fi
+ 
+      - name: Ad-hoc codesign
+        run: codesign -s "-" --deep --force "BaseBox.app"
+
+      - name: Verify app bundle
+        run: |
+          otool -L "BaseBox.app/Contents/MacOS/dosbox" | grep -v "/usr/lib" | grep -v "/System"
+          ls -la "BaseBox.app/Contents/Frameworks/"
+
+      - name: Create DMG
+        run: |
+          DMG_NAME="BaseBox_Universal_${{ env.VERSION_HASH }}.dmg"
+          mkdir dmg-temp
+          cp -R "BaseBox.app" dmg-temp/
+          ln -s /Applications dmg-temp/Applications
+          hdiutil create \
+            -volname "BaseBox" \
+            -srcfolder dmg-temp \
+            -ov \
+            -format UDZO "$DMG_NAME"
+          rm -rf dmg-temp
+          echo "DMG_NAME=$DMG_NAME" >> $GITHUB_ENV
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: macOS-Universal-DMG
+          path: ${{ env.DMG_NAME }}
+
+      - name: Release DMG (on tag push)
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ env.DMG_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
