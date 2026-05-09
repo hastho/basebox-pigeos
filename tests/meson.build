@@ -77,6 +77,20 @@ test(
     is_parallel: false,
 )
 
+localdrive = executable(
+    'localdrive',
+    ['localdrive_tests.cpp', 'stubs.cpp'],
+    dependencies: [gmock_dep, dosbox_dep, ghc_dep, libloguru_dep],
+    include_directories: incdir,
+    cpp_args: cpp_args,
+)
+test(
+    'gtest localdrive',
+    localdrive,
+    workdir: meson.project_source_root(),
+    is_parallel: false,
+)
+
 # other unit tests
 
 unit_tests = [

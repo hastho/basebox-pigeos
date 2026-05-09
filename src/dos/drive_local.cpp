@@ -276,7 +276,9 @@ bool localDrive::FindFirst(const char* _dir, DOS_DTA& dta, bool fcb_findfirst)
 	CROSS_FILENAME(tempDir);
 
 	if (allocation.mediaid == 0xF0) {
-		EmptyCache(); //rescan floppie-content on each findfirst
+		EmptyCache();
+	} else if (refresh_mode == RefreshMode::Lazy) {
+		EmptyCache();
 	}
 
 	// End the temp directory with a slash
@@ -553,7 +555,8 @@ Bits localDrive::UnMount()
 localDrive::localDrive(const char* startdir, uint16_t _bytes_sector,
                        uint8_t _sectors_cluster, uint16_t _total_clusters,
                        uint16_t _free_clusters, uint8_t _mediaid,
-                       bool _readonly, bool _always_open_ro_files)
+                       bool _readonly, bool _always_open_ro_files,
+                       RefreshMode _refresh_mode)
         : readonly(_readonly),
           always_open_ro_files(_always_open_ro_files),
           write_protected_files{},
@@ -563,6 +566,7 @@ localDrive::localDrive(const char* startdir, uint16_t _bytes_sector,
 	safe_strcpy(basedir, startdir);
 	safe_strcpy(info, startdir);
 	dirCache.SetBaseDir(basedir);
+	refresh_mode = _refresh_mode;
 }
 
 bool localFile::Read(uint8_t *data, uint16_t *size)

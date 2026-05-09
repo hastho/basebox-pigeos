@@ -131,6 +131,9 @@ void MOUNT::Run(void) {
 	cmd->FindString("-t",type,true);
 	bool iscdrom = (type =="cdrom"); //Used for mscdex bug cdrom label name emulation
 	const bool readonly = cmd->FindExist("-ro", true);
+	const RefreshMode refresh_mode = cmd->FindExist("-s", true)
+	                                        ? RefreshMode::Lazy
+	                                        : RefreshMode::Manual;
 	if (type=="floppy" || type=="dir" || type=="cdrom" || type =="overlay") {
 		uint16_t sizes[4] ={0};
 		uint8_t mediaid;
@@ -359,7 +362,8 @@ void MOUNT::Run(void) {
 				        mediaid,
 				        readonly,
 				        section->Get_bool(
-				                "allow_write_protected_files"));
+				                "allow_write_protected_files"),
+				        refresh_mode);
 			}
 		}
 	} else {
@@ -415,7 +419,7 @@ void MOUNT::AddMessages() {
 	        "Mount a directory from the host OS to a drive letter.\n"
 	        "\n"
 	        "Usage:\n"
-	        "  [color=light-green]mount[reset] [color=white]DRIVE[reset] [color=light-cyan]DIRECTORY[reset] [-t TYPE] [-ro] [-freesize SIZE] [-label LABEL]\n"
+	        "  [color=light-green]mount[reset] [color=white]DRIVE[reset] [color=light-cyan]DIRECTORY[reset] [-t TYPE] [-ro] [-freesize SIZE] [-label LABEL] [-s]\n"
 	        "  [color=light-green]mount[reset] -u [color=white]DRIVE[reset]  (unmounts the DRIVE's directory)\n"
 	        "\n"
 	        "Parameters:\n"
@@ -424,6 +428,7 @@ void MOUNT::AddMessages() {
 	        "  TYPE       type of the directory to mount: dir, floppy, cdrom, or overlay\n"
 	        "  SIZE       free space for the virtual drive (KB for floppies, MB otherwise)\n"
 	        "  LABEL      drive label name to use\n"
+	        "  -s         enable automatic sync (lazy refresh: rescan on directory access)\n"
 	        "\n"
 	        "Notes:\n"
 	        "  - '-t overlay' redirects writes for mounted drive to another directory.\n"

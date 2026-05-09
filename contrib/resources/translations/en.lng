@@ -2822,7 +2822,7 @@ Map physical folders or drives to a virtual drive letter.
 Mount a directory from the host OS to a drive letter.
 
 Usage:
-  [color=light-green]mount[reset] [color=white]DRIVE[reset] [color=light-cyan]DIRECTORY[reset] [-t TYPE] [-usecd #] [-freesize SIZE] [-label LABEL]
+  [color=light-green]mount[reset] [color=white]DRIVE[reset] [color=light-cyan]DIRECTORY[reset] [-t TYPE] [-usecd #] [-freesize SIZE] [-label LABEL] [-s]
   [color=light-green]mount[reset] -listcd / -cd (lists all detected CD-ROM drives and their numbers)
   [color=light-green]mount[reset] -u [color=white]DRIVE[reset]  (unmounts the DRIVE's directory)
 
@@ -2832,6 +2832,7 @@ Parameters:
   TYPE       type of the directory to mount: dir, floppy, cdrom, or overlay
   SIZE       free space for the virtual drive (KB for floppies, MB otherwise)
   LABEL      drive label name to use
+  -s         enable automatic sync (lazy refresh: rescan on directory access)
 
 Notes:
   - '-t overlay' redirects writes for mounted drive to another directory.

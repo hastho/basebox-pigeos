@@ -74,6 +74,8 @@ private:
 	static drive_infos_t drive_infos;
 };
 
+enum class RefreshMode { Manual, Lazy };
+
 // Must be constructed with a shared_ptr as it uses weak_from_this()
 class localDrive : public DOS_Drive,
                    public std::enable_shared_from_this<localDrive> {
@@ -81,7 +83,8 @@ public:
 	localDrive(const char* startdir, uint16_t _bytes_sector,
 	           uint8_t _sectors_cluster, uint16_t _total_clusters,
 	           uint16_t _free_clusters, uint8_t _mediaid,
-	           bool _readonly, bool _always_open_ro_files = false);
+	           bool _readonly, bool _always_open_ro_files = false,
+	           RefreshMode _refresh_mode = RefreshMode::Manual);
 	std::unique_ptr<DOS_File> FileOpen(const char* name, uint8_t flags) override;
 	std::unique_ptr<DOS_File> FileCreate(const char* name,
 	                                     FatAttributeFlags attributes) override;
@@ -131,6 +134,7 @@ private:
 		uint16_t free_clusters;
 		uint8_t mediaid;
 	} allocation;
+	RefreshMode refresh_mode = RefreshMode::Manual;
 };
 
 #ifdef _MSC_VER
